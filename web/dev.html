@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tiptap Mobile Bridge — dev host</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, system-ui, sans-serif;
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 16px;
+        padding: 16px;
+      }
+      #editor {
+        border: 1px solid #e2e2e2;
+        border-radius: 8px;
+        padding: 12px;
+        min-height: 200px;
+      }
+      #host {
+        font: 13px/1.5 ui-monospace, 'SF Mono', Menlo, monospace;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+      .toolbar button {
+        padding: 6px 10px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background: #fff;
+        cursor: pointer;
+      }
+      .toolbar button[data-active='true'] {
+        background: #1a1a1a;
+        color: #fff;
+        border-color: #1a1a1a;
+      }
+      #log {
+        white-space: pre-wrap;
+        background: #f6f6f6;
+        border-radius: 6px;
+        padding: 10px;
+        height: 70vh;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Editor mounts here once "init" is sent (same surface a webview shows). -->
+    <div id="editor"></div>
+
+    <!-- Simulated native host: drives the bridge over window.postMessage. -->
+    <aside id="host">
+      <div class="toolbar">
+        <button data-cmd="init">init</button>
+        <button data-exec="toggleBold">Bold</button>
+        <button data-exec="toggleItalic">Italic</button>
+        <button data-exec="toggleHeading" data-args='{"level":1}'>H1</button>
+        <button data-exec="toggleBulletList">• List</button>
+        <button data-cmd="getJSON">getJSON</button>
+      </div>
+      <div id="log"></div>
+    </aside>
+
+    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/dev-host.ts"></script>
+  </body>
+</html>
