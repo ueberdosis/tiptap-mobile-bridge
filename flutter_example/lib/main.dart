@@ -63,13 +63,71 @@ class _EditorPageState extends State<EditorPage> {
   }
 }
 
+/// A toolbar button: the bridge `key` to read active state by, the Tiptap command
+/// to run, its icon/tooltip, and optional positional command args. Mirrors a web-side
+/// `TOOLBAR_COMMANDS` entry (key + command + args).
+class _Btn {
+  const _Btn(this.key, this.command, this.icon, this.tooltip, [this.args]);
+
+  final String key;
+  final String command;
+  final IconData icon;
+  final String tooltip;
+
+  /// Positional args spread into the command, e.g. `['left']` for setTextAlign,
+  /// `[{'level': 1}]` for toggleHeading.
+  final List<dynamic>? args;
+}
+
+/// Toggle/insert buttons whose `onPressed` is a plain `exec(command, args)`. The
+/// `link` button needs a URL prompt, so it is rendered separately below.
+const _toolbarButtons = <_Btn>[
+  _Btn('bold', 'toggleBold', Icons.format_bold, 'Bold'),
+  _Btn('italic', 'toggleItalic', Icons.format_italic, 'Italic'),
+  _Btn('underline', 'toggleUnderline', Icons.format_underlined, 'Underline'),
+  _Btn('strike', 'toggleStrike', Icons.format_strikethrough, 'Strikethrough'),
+  _Btn('highlight', 'toggleHighlight', Icons.highlight, 'Highlight'),
+  _Btn('h1', 'toggleHeading', Icons.looks_one, 'Heading 1', [{'level': 1}]),
+  _Btn('h2', 'toggleHeading', Icons.looks_two, 'Heading 2', [{'level': 2}]),
+  _Btn('bulletList', 'toggleBulletList', Icons.format_list_bulleted, 'Bullet list'),
+  _Btn('taskList', 'toggleTaskList', Icons.checklist, 'Task list'),
+  _Btn('alignLeft', 'setTextAlign', Icons.format_align_left, 'Align left', ['left']),
+  _Btn('alignCenter', 'setTextAlign', Icons.format_align_center, 'Align center', ['center']),
+  _Btn('alignRight', 'setTextAlign', Icons.format_align_right, 'Align right', ['right']),
+  _Btn('table', 'insertTable', Icons.grid_on, 'Insert table', [{'rows': 3, 'cols': 3, 'withHeaderRow': true}]),
+];
+
 class _Toolbar extends StatelessWidget {
   const _Toolbar({required this.bridge, required this.states});
 
   final TiptapBridge bridge;
   final Map<String, CommandState> states;
 
-  bool _isActive(String command) => states[command]?.isActive ?? false;
+  bool _isActive(String key) => states[key]?.isActive ?? false;
+
+  /// Prompt for a URL, then apply it as a link over the bridge.
+  Future<void> _promptLink(BuildContext context) async {
+    final controller = TextEditingController();
+    final href = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add link'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(hintText: 'https://example.com'),
+          onSubmitted: (value) => Navigator.pop(ctx, value),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Add')),
+        ],
+      ),
+    );
+    if (href == null || href.isEmpty) return;
+    await bridge.exec('setLink', [{'href': href}]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,29 +135,18 @@ class _Toolbar extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
+          for (final button in _toolbarButtons)
+            IconButton(
+              tooltip: button.tooltip,
+              isSelected: _isActive(button.key),
+              onPressed: () => bridge.exec(button.command, button.args),
+              icon: Icon(button.icon),
+            ),
           IconButton(
-            tooltip: 'Bold',
-            isSelected: _isActive('toggleBold'),
-            onPressed: () => bridge.exec('toggleBold'),
-            icon: const Icon(Icons.format_bold),
-          ),
-          IconButton(
-            tooltip: 'Italic',
-            isSelected: _isActive('toggleItalic'),
-            onPressed: () => bridge.exec('toggleItalic'),
-            icon: const Icon(Icons.format_italic),
-          ),
-          IconButton(
-            tooltip: 'Bullet list',
-            isSelected: _isActive('toggleBulletList'),
-            onPressed: () => bridge.exec('toggleBulletList'),
-            icon: const Icon(Icons.format_list_bulleted),
-          ),
-          IconButton(
-            tooltip: 'Heading 1',
-            isSelected: _isActive('toggleHeading'),
-            onPressed: () => bridge.exec('toggleHeading', {'level': 1}),
-            icon: const Icon(Icons.title),
+            tooltip: 'Link',
+            isSelected: _isActive('link'),
+            onPressed: () => _promptLink(context),
+            icon: const Icon(Icons.link),
           ),
           const SizedBox(width: 8),
           IconButton(

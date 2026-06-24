@@ -67,14 +67,16 @@ type CommandState   = { canExec: boolean; isActive: boolean }
 emits, in order, `schemaReady` → `ready` → `selectionChanged`, then responds `ok`. Must be
 the first command; sending it twice fails with `ALREADY_INITIALIZED`.
 
-**`exec`** — the generic escape hatch: run *any* Tiptap command by name. The editor runs
-`editor.chain().focus()[command](args?).run()`, so it focuses first, then dispatches.
-`result.executed` is the boolean returned by `.run()` (i.e. whether the command applied).
-Unknown names fail with `UNKNOWN_COMMAND`.
+**`exec`** — the generic escape hatch: run *any* Tiptap command by name. `args` is a
+**positional** array spread into the command — the editor runs
+`editor.chain().focus()[command](...args).run()` — so one path serves both object-arg
+commands (`toggleHeading([{ level: 2 }])`) and scalar-arg ones (`setTextAlign(['left'])`).
+It focuses first, then dispatches. `result.executed` is the boolean returned by `.run()`
+(i.e. whether the command applied). Unknown names fail with `UNKNOWN_COMMAND`.
 
 ```json
 { "type": "command", "id": "7", "name": "exec",
-  "params": { "command": "toggleHeading", "args": { "level": 2 } } }
+  "params": { "command": "toggleHeading", "args": [{ "level": 2 }] } }
 ```
 
 **`getJSON`** — return the full document as ProseMirror JSON. Pair it with the
@@ -98,7 +100,8 @@ hard-coding what the editor supports.
 
 **`selectionChanged`** — `payload: { selection, commandStates }`. The cheap, high-frequency
 channel, **debounced ~10 ms**. `selection` is `{ from, to, empty }`. `commandStates` maps a
-command name to `{ canExec, isActive }` and drives toolbar button enabled/active styling.
+stable toolbar key (e.g. `bold`, `h1`, `alignLeft`) to `{ canExec, isActive }` and drives
+toolbar button enabled/active styling.
 It contains **only the commands the toolbar needs**, not every command — see the
 [`can()` side-effect gotcha](./GUIDE.md#gotcha-probing-cans-side-effects).
 

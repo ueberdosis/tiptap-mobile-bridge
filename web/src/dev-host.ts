@@ -60,7 +60,7 @@ document.querySelector('#host')!.addEventListener('click', (event) => {
   if (button.dataset.cmd === 'init') send('init')
   else if (button.dataset.cmd === 'getJSON') send('getJSON')
   else if (button.dataset.exec) {
-    const args = button.dataset.args ? (JSON.parse(button.dataset.args) as Record<string, unknown>) : undefined
+    const args = button.dataset.args ? (JSON.parse(button.dataset.args) as unknown[]) : undefined
     send('exec', { command: button.dataset.exec, args })
   }
 })
