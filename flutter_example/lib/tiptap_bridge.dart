@@ -76,7 +76,7 @@ class TiptapBridge {
 
   Future<void> init() => _send('init');
 
-  Future<void> exec(String command, [Map<String, dynamic>? args]) =>
+  Future<void> exec(String command, [List<dynamic>? args]) =>
       _send('exec', params: {'command': command, if (args != null) 'args': args});
 
   Future<Object?> getJson() => _send('getJSON');

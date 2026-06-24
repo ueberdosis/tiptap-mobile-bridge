@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "postbuild": "node -e \"require('fs').copyFileSync('dist/index.html','../flutter_example/assets/editor.html')\"",
     "preview": "vite preview"
   },
   "devDependencies": {
@@ -15,6 +16,10 @@
   },
   "dependencies": {
     "@tiptap/core": "^3.27.1",
+    "@tiptap/extension-highlight": "^3.27.1",
+    "@tiptap/extension-list": "^3.27.1",
+    "@tiptap/extension-table": "^3.27.1",
+    "@tiptap/extension-text-align": "^3.27.1",
     "@tiptap/pm": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1"
   }

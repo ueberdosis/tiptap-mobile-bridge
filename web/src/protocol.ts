@@ -19,6 +19,18 @@ export type Command = {
   params?: Record<string, unknown>
 }
 
+/** Params for the generic `exec` command. */
+export type ExecParams = {
+  /** Tiptap command name to run, e.g. `toggleBold`, `toggleHeading`, `setTextAlign`. */
+  command: string
+  /**
+   * Positional arguments spread into the command. One generic path serves both
+   * object-arg commands (`[{ level: 1 }]` -> `toggleHeading`) and scalar-arg ones
+   * (`['left']` -> `setTextAlign`), since Tiptap command signatures are not uniform.
+   */
+  args?: unknown[]
+}
+
 /** A reply to a command, correlated by `id`. Carries either `result` or `error`. */
 export type Response = {
   type: 'response'

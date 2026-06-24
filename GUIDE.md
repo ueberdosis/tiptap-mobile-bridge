@@ -50,29 +50,24 @@ flutter_example/          reference native host (the implemented, tested platfor
 
 ## Quick start
 
-**1. Build the editor bundle:**
+**1. Build the editor bundle** (the `postbuild` script auto-copies it into the host's assets):
 
 ```bash
 cd web
 npm install
-npm run build           # → web/dist/index.html (one self-contained file)
+npm run build           # → web/dist/index.html, then copied to flutter_example/assets/editor.html
 ```
 
-**2. Copy it into the host's assets:**
-
-```bash
-cp web/dist/index.html flutter_example/assets/editor.html
-```
-
-**3. Run the reference app** (iOS simulator or a real device):
+**2. Run the reference app** (iOS simulator or a real device):
 
 ```bash
 cd flutter_example
 flutter run
 ```
 
-Tap into the editor and type; use the native toolbar (Bold / Italic / List / H1) — its
-buttons send `exec` commands and light up from `selectionChanged` state, both over the bridge.
+Tap into the editor and type; use the native toolbar (bold / italic / underline / strike /
+highlight / H1 / H2 / lists / task list / align / link / table) — its buttons send `exec`
+commands and light up from `selectionChanged` state, both over the bridge.
 
 ## Test without a device
 
