@@ -42,13 +42,28 @@ function targetName(command: string): string | null {
 }
 
 /**
- * Build the per-command state map that drives native toolbar buttons.
- * Cheap: only inspects the current selection (isActive/can), not the whole doc.
+ * Commands whose active/enabled state drives the native toolbar buttons. We probe
+ * ONLY these — never the full `editor.commands` set.
+ *
+ * `editor.can()[name]()` executes each command in dry-run mode, but some Tiptap
+ * commands don't guard their side-effects behind `dispatch`: `blur`, for instance,
+ * unconditionally schedules `requestAnimationFrame(() => view.dom.blur())`, so probing
+ * it blurs the editor a frame later — on every keystroke. An allowlist is the robust
+ * fix (a denylist would silently break if another unguarded command is added). Keep
+ * this in sync with the native toolbar's buttons.
+ */
+const TOOLBAR_COMMANDS = ['toggleBold', 'toggleItalic', 'toggleBulletList', 'toggleHeading'] as const
+
+/**
+ * Build the per-command state map that drives native toolbar buttons. Cheap and safe:
+ * probes only {@link TOOLBAR_COMMANDS} against the current selection (isActive/can),
+ * never the full command set — see TOOLBAR_COMMANDS for why probing every command can
+ * blur the editor.
  */
 function buildCommandStates(ed: Editor): Record<string, CommandState> {
   const can = ed.can() as unknown as Record<string, () => boolean>
   const states: Record<string, CommandState> = {}
-  for (const name of Object.keys(ed.commands)) {
+  for (const name of TOOLBAR_COMMANDS) {
     let canExec = false
     try {
       const probe = can[name]

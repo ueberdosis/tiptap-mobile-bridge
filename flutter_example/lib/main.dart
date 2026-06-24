@@ -52,7 +52,9 @@ class _EditorPageState extends State<EditorPage> {
             child: InAppWebView(
               initialFile: 'assets/editor.html',
               onWebViewCreated: _bridge.attach,
-              onLoadStop: (controller, url) => _bridge.init(),
+              onLoadStop: (controller, url) {
+                _bridge.init();
+              },
             ),
           ),
         ],
