@@ -9,6 +9,10 @@ struct EditorScreen: View {
     /// Content fetched by Get JSON / Get HTML, shown in a sheet.
     @State private var info: InfoText?
 
+    /// URL entry state for the link prompt, the native counterpart to Flutter's `_promptLink` dialog.
+    @State private var showLinkPrompt = false
+    @State private var linkURL = ""
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -55,6 +59,15 @@ struct EditorScreen: View {
                     .accessibilityLabel(item.label)
                 }
 
+                // The link button needs a URL before it can run setLink, so it prompts rather than
+                // exec-ing directly. Rendered apart from ToolItem.all, mirroring Flutter's _promptLink.
+                Button { showLinkPrompt = true } label: {
+                    Image(systemName: "link").frame(minWidth: 28)
+                }
+                .buttonStyle(.bordered)
+                .tint(isActive("link") ? .accentColor : .secondary)
+                .accessibilityLabel("Link")
+
                 Divider().frame(height: 24)
 
                 Button("JSON") { fetch("getJSON") { try await bridge.getJSON() } }
@@ -65,6 +78,13 @@ struct EditorScreen: View {
             .padding(.horizontal)
             .padding(.vertical, 6)
         }
+        .alert("Add link", isPresented: $showLinkPrompt) {
+            TextField("https://example.com", text: $linkURL)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+            Button("Cancel", role: .cancel) { linkURL = "" }
+            Button("Add") { applyLink() }
+        }
     }
 
     // MARK: Actions
@@ -73,6 +93,12 @@ struct EditorScreen: View {
     /// header event line lights up as the user interacts. Mirrors the Flutter onLoadStop hook.
     private func start() {
         Task {
+            // Answer the editor's uploadImage host request with a placeholder URL (no real backend),
+            // mirroring the Flutter app. Registered before init so a paste can never race ahead of it.
+            bridge.onRequest("uploadImage") { _ in
+                try await Task.sleep(for: .seconds(1))
+                return "https://picsum.photos/400"
+            }
             do {
                 try await bridge.initEditor()
                 try await bridge.subscribe("focus")
@@ -85,6 +111,15 @@ struct EditorScreen: View {
 
     private func isActive(_ key: String) -> Bool {
         bridge.commandStates[key]?.isActive ?? false
+    }
+
+    /// Apply the URL entered in the link prompt as a link over the bridge, then clear the field.
+    /// Empty input is a no-op, matching the Flutter prompt.
+    private func applyLink() {
+        let href = linkURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        linkURL = ""
+        guard !href.isEmpty else { return }
+        Task { try? await bridge.exec("setLink", [["href": href]]) }
     }
 
     /// Run a content-fetch command and present its result (or the error) in the sheet.
@@ -114,8 +149,17 @@ private struct ToolItem: Identifiable {
     static let all: [ToolItem] = [
         ToolItem(key: "bold", command: "toggleBold", args: nil, systemImage: "bold", label: "Bold"),
         ToolItem(key: "italic", command: "toggleItalic", args: nil, systemImage: "italic", label: "Italic"),
+        ToolItem(key: "underline", command: "toggleUnderline", args: nil, systemImage: "underline", label: "Underline"),
+        ToolItem(key: "strike", command: "toggleStrike", args: nil, systemImage: "strikethrough", label: "Strikethrough"),
+        ToolItem(key: "highlight", command: "toggleHighlight", args: nil, systemImage: "highlighter", label: "Highlight"),
         ToolItem(key: "h1", command: "toggleHeading", args: [["level": 1]], systemImage: "1.square", label: "Heading 1"),
+        ToolItem(key: "h2", command: "toggleHeading", args: [["level": 2]], systemImage: "2.square", label: "Heading 2"),
         ToolItem(key: "bulletList", command: "toggleBulletList", args: nil, systemImage: "list.bullet", label: "Bullet list"),
+        ToolItem(key: "taskList", command: "toggleTaskList", args: nil, systemImage: "checklist", label: "Task list"),
+        ToolItem(key: "alignLeft", command: "setTextAlign", args: ["left"], systemImage: "text.alignleft", label: "Align left"),
+        ToolItem(key: "alignCenter", command: "setTextAlign", args: ["center"], systemImage: "text.aligncenter", label: "Align center"),
+        ToolItem(key: "alignRight", command: "setTextAlign", args: ["right"], systemImage: "text.alignright", label: "Align right"),
+        ToolItem(key: "table", command: "insertTable", args: [["rows": 3, "cols": 3, "withHeaderRow": true] as [String: Any]], systemImage: "tablecells", label: "Insert table"),
     ]
 }
 
