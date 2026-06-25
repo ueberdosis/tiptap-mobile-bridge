@@ -1,4 +1,4 @@
-import type { Command, CommandState, OutboundMessage, SelectionState } from './protocol'
+import type { Command, CommandState, HostReply, OutboundMessage, SelectionState } from './protocol'
 
 /**
  * Dev-only "native host" simulator.
@@ -23,11 +23,38 @@ function send(name: string, params?: Record<string, unknown>): void {
   append(`→ ${name} ${params ? JSON.stringify(params) : ''}  (id ${id})`)
 }
 
+/** Whether the "drop next reply" box is checked; reading it consumes (unchecks) it. */
+function dropNextReply(): boolean {
+  const box = document.querySelector<HTMLInputElement>('#drop-reply')
+  if (!box?.checked) return false
+  box.checked = false
+  return true
+}
+
 // Everything the editor sends back lands here.
 window.addEventListener('message', (event: MessageEvent) => {
   const data = event.data as { source?: string; message?: OutboundMessage }
   if (data?.source !== 'tiptap-editor' || !data.message) return
   const m = data.message
+
+  // Mock host side of the request/reply direction: answer a hostRequest via handleReply.
+  if (m.type === 'hostRequest') {
+    append(`← hostRequest ${m.name}  (id ${m.id})`)
+    if (dropNextReply()) {
+      append(`   dropping reply to ${m.id} (simulating a silent host; the editor rejects on timeout)`)
+      return
+    }
+    // Reply after a short delay so the round trip is observable and stays async.
+    setTimeout(() => {
+      const reply: HostReply =
+        m.name === 'uploadImage'
+          ? { type: 'hostReply', id: m.id, ok: true, result: 'https://picsum.photos/400' }
+          : { type: 'hostReply', id: m.id, ok: false, error: { code: 'UNKNOWN_REQUEST', message: m.name } }
+      window.postMessage({ source: 'tiptap-host', reply }, '*')
+      append(`→ hostReply ${m.id}  ${reply.ok ? String(reply.result) : 'ERR'}`)
+    }, 400)
+    return
+  }
 
   if (m.type === 'event') {
     if (m.name === 'selectionChanged') {
@@ -54,6 +81,26 @@ window.addEventListener('message', (event: MessageEvent) => {
   append(`← response id ${m.id}  ${m.ok ? 'OK' : 'ERR'}  ${detail}`)
 })
 
+// A 1x1 transparent PNG, small enough to inline so the upload round trip is testable here.
+const TINY_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+
+/**
+ * Dispatch a synthetic image paste onto the editor, exercising the real `handlePaste` ->
+ * `hostRequest('uploadImage')` -> reply -> `setImage` flow without a physical clipboard.
+ */
+async function simulateImagePaste(): Promise<void> {
+  const blob = await (await fetch(TINY_PNG)).blob()
+  const data = new DataTransfer()
+  data.items.add(new File([blob], 'pasted.png', { type: 'image/png' }))
+  const paste = new ClipboardEvent('paste', { bubbles: true, cancelable: true })
+  // Some browsers ignore the constructor's clipboardData, so attach it explicitly.
+  Object.defineProperty(paste, 'clipboardData', { value: data })
+  const target = document.querySelector('#editor .ProseMirror') ?? document.querySelector('#editor')
+  target?.dispatchEvent(paste)
+  append('→ simulated image paste')
+}
+
 // Wire the toolbar buttons.
 document.querySelector('#host')!.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest('button')
@@ -61,6 +108,7 @@ document.querySelector('#host')!.addEventListener('click', (event) => {
   if (button.dataset.cmd === 'init') send('init')
   else if (button.dataset.cmd === 'getJSON') send('getJSON')
   else if (button.dataset.cmd === 'getHTML') send('getHTML')
+  else if (button.dataset.cmd === 'upload') void simulateImagePaste()
   else if (button.dataset.subscribe) send('subscribe', { event: button.dataset.subscribe })
   else if (button.dataset.unsubscribe) send('unsubscribe', { event: button.dataset.unsubscribe })
   else if (button.dataset.exec) {

@@ -3,7 +3,9 @@
  *
  * The native host and the editor (running inside a webview) communicate purely
  * through JSON messages. Commands flow host -> editor and are correlated to a
- * response by `id`; events flow editor -> host and carry no `id` (no reply).
+ * response by `id`; events flow editor -> host and carry no `id` (no reply); and
+ * the editor can send a host request that the host answers with one reply, also
+ * correlated by `id`.
  *
  * The transport is platform-agnostic — this contract is identical on iOS,
  * Android, Flutter, and the browser; only the carrier of the JSON differs.
@@ -71,5 +73,28 @@ export type EditorEvent =
 /** Params for `subscribe` / `unsubscribe`: the Tiptap editor event name to start/stop receiving. */
 export type SubscribeParams = { event: string }
 
-/** Anything the editor sends outbound to the host. */
-export type OutboundMessage = Response | EditorEvent
+/**
+ * A request from the editor to the native host that awaits a correlated reply: the third protocol
+ * direction, mirroring command/response but editor -> host. The host routes on `name`, runs its
+ * handler, and answers with exactly one {@link HostReply} echoing `id`.
+ */
+export type HostRequest = {
+  type: 'hostRequest'
+  /** Correlation id, `r`-prefixed (e.g. `r1`) to stay distinct from host-issued command ids. */
+  id: string
+  /** Request name the host routes on, e.g. `uploadImage`. */
+  name: string
+  params?: Record<string, unknown>
+}
+
+/** The host's reply to a {@link HostRequest}, correlated by `id`. Carries either `result` or `error`. */
+export type HostReply = {
+  type: 'hostReply'
+  id: string
+  ok: boolean
+  result?: unknown
+  error?: { code: string; message: string }
+}
+
+/** Anything the editor sends outbound to the host: a command response, an event, or a host request. */
+export type OutboundMessage = Response | EditorEvent | HostRequest

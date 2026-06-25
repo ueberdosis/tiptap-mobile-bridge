@@ -31,6 +31,9 @@ class TiptapBridge {
   int _nextId = 1;
   final Map<String, Completer<Object?>> _pending = {};
 
+  /// Handlers the editor can invoke via a host request, keyed by request name. See [onRequest].
+  final Map<String, Future<Object?> Function(Map<String, dynamic> params)> _requestHandlers = {};
+
   /// Latest per-command state (from selectionChanged); drives toolbar buttons.
   final ValueNotifier<Map<String, CommandState>> commandStates = ValueNotifier({});
 
@@ -75,7 +78,39 @@ class TiptapBridge {
         );
       }
       _events.add(TiptapEvent(name, payload));
+    } else if (type == 'hostRequest') {
+      _handleHostRequest(msg);
     }
+  }
+
+  /// Route an inbound host request to its registered handler and reply with the outcome:
+  /// the handler's resolved value as `result`, an unknown name or thrown error as `error`.
+  Future<void> _handleHostRequest(Map<String, dynamic> msg) async {
+    final id = msg['id'] as String;
+    final name = msg['name'] as String;
+    final params = (msg['params'] as Map<String, dynamic>?) ?? const {};
+    final handler = _requestHandlers[name];
+    if (handler == null) {
+      _reply(id, ok: false, error: {'code': 'UNKNOWN_REQUEST', 'message': 'no handler for "$name"'});
+      return;
+    }
+    try {
+      final result = await handler(params);
+      _reply(id, ok: true, result: result);
+    } catch (error) {
+      _reply(id, ok: false, error: {'code': 'REQUEST_FAILED', 'message': error.toString()});
+    }
+  }
+
+  /// Send a reply to a host request back to the editor via `window.tiptapBridge.handleReply`.
+  /// The reply JSON is double-encoded into a JS string literal so it survives as an argument
+  /// to evaluateJavascript.
+  void _reply(String id, {required bool ok, Object? result, Map<String, dynamic>? error}) {
+    final reply = <String, dynamic>{'type': 'hostReply', 'id': id, 'ok': ok};
+    if (result != null) reply['result'] = result;
+    if (error != null) reply['error'] = error;
+    final js = 'window.tiptapBridge.handleReply(${jsonEncode(jsonEncode(reply))})';
+    _controller?.evaluateJavascript(source: js);
   }
 
   Future<Object?> _send(String name, {Map<String, dynamic>? params}) {
@@ -108,6 +143,13 @@ class TiptapBridge {
 
   /// Stop receiving the named Tiptap editor event.
   Future<void> unsubscribe(String event) => _send('unsubscribe', params: {'event': event});
+
+  /// Register a handler the editor can invoke via a host request (e.g. `uploadImage`). The
+  /// handler's resolved value becomes the reply `result`; a thrown error becomes the reply
+  /// `error`. One handler per name: registering an existing name replaces it.
+  void onRequest(String name, Future<Object?> Function(Map<String, dynamic> params) handler) {
+    _requestHandlers[name] = handler;
+  }
 
   void dispose() {
     commandStates.dispose();

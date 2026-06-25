@@ -85,13 +85,14 @@ responses/events coming back. No native toolchain needed.
 
 ## Transport per platform
 
-Every host implements the same two directions. **Inbound** is identical everywhere; only the
-**outbound** carrier differs. The web side ([`bridge.ts`](./web/src/bridge.ts)) auto-detects
-the platform (order: flutter → ios → android → browser).
+Every host carries the protocol's directions over one message channel. **Inbound** is identical
+everywhere; only the **outbound** carrier differs. The web side ([`bridge.ts`](./web/src/bridge.ts))
+auto-detects the platform (order: flutter → ios → android → browser).
 
 - **Inbound (host → editor), all platforms:** evaluate JS that calls
-  `window.tiptapBridge.handleCommand("<json>")`.
-- **Outbound (editor → host):** see each platform below.
+  `window.tiptapBridge.handleCommand("<json>")` for a command, or
+  `window.tiptapBridge.handleReply("<json>")` to answer an editor-initiated host request.
+- **Outbound (editor → host):** command responses, events, and host requests; see each platform below.
 
 Async results are correlated by the command `id` **in the host**, not by any transport return
 value — so a plain one-way message channel is enough on every platform.
@@ -120,6 +121,10 @@ Future<Object?> _send(String name, {Map<String, dynamic>? params}) {
   return completer.future;
 }
 ```
+
+The editor can also send a host request the other way; the host answers it by calling
+`window.tiptapBridge.handleReply(...)` from a `type == 'hostRequest'` message, using the same
+double-encode as `_send`. `main.dart` registers the handlers with `bridge.onRequest(name, ...)`.
 
 In `main.dart` the webview loads the bundle and inits it once loaded:
 
@@ -167,8 +172,8 @@ webView.evaluateJavascript("window.tiptapBridge.handleCommand(${JSONObject.quote
 
 ### Browser — dev only
 
-Both directions use `window.postMessage` with `source` tags (`tiptap-host` inbound,
-`tiptap-editor` outbound); this is exactly what the dev host uses.
+Every direction uses `window.postMessage` with `source` tags (`tiptap-host` inbound, including host
+replies; `tiptap-editor` outbound, including host requests); this is exactly what the dev host uses.
 
 > Only the **Flutter** host is implemented and tested in this POC. The iOS/Android snippets
 > are the reference wiring the protocol expects — the web side already detects and targets

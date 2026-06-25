@@ -1,6 +1,16 @@
-import type { Command, OutboundMessage } from './protocol'
+import type { Command, HostReply, OutboundMessage } from './protocol'
 
 type Platform = 'flutter' | 'ios' | 'android' | 'browser'
+
+/** How long a host request waits for its reply before rejecting, so a silent host cannot hang the editor. */
+const REQUEST_TIMEOUT_MS = 30_000
+
+/** A host request waiting for its reply: how to settle it, and the timer that rejects it. */
+type PendingReply = {
+  resolve: (value: unknown) => void
+  reject: (reason: Error) => void
+  timer: ReturnType<typeof setTimeout>
+}
 
 declare global {
   interface Window {
@@ -8,8 +18,14 @@ declare global {
     flutter_inappwebview?: { callHandler: (name: string, ...args: unknown[]) => Promise<unknown> }
     webkit?: { messageHandlers?: { tiptapBridge?: { postMessage: (msg: string) => void } } }
     AndroidTiptapBridge?: { postMessage: (msg: string) => void }
-    /** Inbound entry point the native host calls (via evaluateJavaScript) to send a command. */
-    tiptapBridge?: { handleCommand: (json: string) => void }
+    /**
+     * Inbound entry points the native host calls (via evaluateJavaScript): `handleCommand`
+     * delivers a command, `handleReply` delivers a reply to a host request.
+     */
+    tiptapBridge?: {
+      handleCommand: (json: string) => void
+      handleReply: (json: string) => void
+    }
   }
 }
 
@@ -35,7 +51,13 @@ function detectPlatform(): Platform {
 export class Bridge {
   private readonly platform: Platform = detectPlatform()
 
-  /** Register the inbound handler the host uses to deliver commands. */
+  /** In-flight host requests awaiting a reply, keyed by request id. */
+  private readonly pendingReplies = new Map<string, PendingReply>()
+
+  /** Monotonic counter for editor-issued request ids (rendered `r`-prefixed). */
+  private nextRequestId = 1
+
+  /** Register the inbound handlers the host uses to deliver commands and replies. */
   start(onCommand: (command: Command) => void): void {
     window.tiptapBridge = {
       handleCommand: (json: string) => {
@@ -45,16 +67,57 @@ export class Bridge {
           console.error('[tiptap-bridge] failed to parse command', error)
         }
       },
+      handleReply: (json: string) => {
+        try {
+          this.settleReply(JSON.parse(json) as HostReply)
+        } catch (error) {
+          console.error('[tiptap-bridge] failed to parse reply', error)
+        }
+      },
     }
 
     // Browser fallback so the protocol can be exercised in a plain browser tab.
     if (this.platform === 'browser') {
       window.addEventListener('message', (event: MessageEvent) => {
-        const data = event.data as { source?: string; command?: Command }
-        if (data && data.source === 'tiptap-host' && data.command) {
-          onCommand(data.command)
-        }
+        const data = event.data as { source?: string; command?: Command; reply?: HostReply }
+        if (data?.source !== 'tiptap-host') return
+        if (data.command) onCommand(data.command)
+        else if (data.reply) this.settleReply(data.reply)
       })
+    }
+  }
+
+  /**
+   * Send a request to the host and await its reply (the editor -> host direction). Resolves with the
+   * reply's `result`, rejects on an error reply or if no reply arrives within
+   * {@link REQUEST_TIMEOUT_MS}. The id is `r`-prefixed to stay distinct from host command ids.
+   */
+  request(name: string, params?: Record<string, unknown>): Promise<unknown> {
+    const id = `r${this.nextRequestId++}`
+    return new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingReplies.delete(id)
+        reject(new Error(`host request timed out after ${REQUEST_TIMEOUT_MS}ms: ${name} (${id})`))
+      }, REQUEST_TIMEOUT_MS)
+      this.pendingReplies.set(id, { resolve, reject, timer })
+      this.send({ type: 'hostRequest', id, name, params })
+    })
+  }
+
+  /**
+   * Settle the pending promise for a reply. A reply with an unknown id (e.g. one whose request
+   * already timed out) is ignored, so a late host can never throw here.
+   */
+  private settleReply(reply: HostReply): void {
+    const pending = this.pendingReplies.get(reply.id)
+    if (!pending) return
+    clearTimeout(pending.timer)
+    this.pendingReplies.delete(reply.id)
+    if (reply.ok) {
+      pending.resolve(reply.result)
+    } else {
+      const { code, message } = reply.error ?? { code: 'HOST_ERROR', message: 'host request failed' }
+      pending.reject(new Error(`${code}: ${message}`))
     }
   }
 

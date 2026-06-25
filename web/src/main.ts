@@ -1,5 +1,6 @@
 import { Editor } from '@tiptap/core'
 import { Highlight } from '@tiptap/extension-highlight'
+import { Image } from '@tiptap/extension-image'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
 import { TextAlign } from '@tiptap/extension-text-align'
@@ -33,6 +34,61 @@ function ok(id: string, result?: unknown): void {
 
 function fail(id: string, code: string, message: string): void {
   bridge.send({ type: 'response', id, ok: false, error: { code, message } })
+}
+
+/** Send a request to the native host and await its reply (editor -> host -> editor). */
+function hostRequest(name: string, params?: Record<string, unknown>): Promise<unknown> {
+  return bridge.request(name, params)
+}
+
+/** The first image file in a clipboard payload, or null if none is present. */
+function imageFileFrom(data: DataTransfer | null): File | null {
+  for (const file of Array.from(data?.files ?? [])) {
+    if (file.type.startsWith('image/')) return file
+  }
+  return null
+}
+
+/** Read a file as a base64 data URL, the form in which a pasted image is handed to the host. */
+function readDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error ?? new Error('failed to read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * Ask the host to upload a pasted image, then insert the returned URL. Runs after the default
+ * paste has already been suppressed, so failures are logged rather than thrown: there is no
+ * paste handler left to fall back to, and a throw here would be an unhandled rejection.
+ */
+async function uploadAndInsertImage(file: File): Promise<void> {
+  try {
+    const dataUrl = await readDataUrl(file)
+    const url = await hostRequest('uploadImage', { dataUrl })
+    if (typeof url === 'string' && editor) {
+      editor.chain().focus().setImage({ src: url }).run()
+    }
+  } catch (error) {
+    console.error('[tiptap-bridge] image upload failed', error)
+  }
+}
+
+/**
+ * ProseMirror paste handler: when the clipboard holds an image, suppress the default insert and
+ * kick off the host upload (returning `true` synchronously; the upload round trip runs after).
+ * Non-image pastes return `false` so normal paste handling proceeds. The forwarded `paste` editor
+ * event (see {@link FORWARDED_EVENTS}) is emitted through this same ProseMirror paste handling, so
+ * returning `true` here suppresses `paste` for the intercepted image; a non-image paste is not
+ * intercepted and still fires `paste`. Verified empirically in the dev host.
+ */
+function handleImagePaste(event: ClipboardEvent): boolean {
+  const file = imageFileFrom(event.clipboardData)
+  if (!file) return false
+  void uploadAndInsertImage(file)
+  return true
 }
 
 /**
@@ -186,9 +242,13 @@ function handleInit(command: Command): void {
       TaskList,
       TaskItem.configure({ nested: true }),
       TableKit,
+      Image,
     ],
     content: (params.content as string | undefined) ?? '<p>Hello from Tiptap 👋</p>',
     editable: params.editable !== false,
+    editorProps: {
+      handlePaste: (_view, event) => handleImagePaste(event),
+    },
     onCreate: ({ editor: ed }) => {
       send({
         type: 'event',

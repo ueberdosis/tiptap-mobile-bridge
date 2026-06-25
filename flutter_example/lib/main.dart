@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -28,55 +30,38 @@ class EditorPage extends StatefulWidget {
 class _EditorPageState extends State<EditorPage> {
   final TiptapBridge _bridge = TiptapBridge();
 
-  /// Whether we're currently subscribed to the demo events (focus/blur/update).
-  bool _eventsOn = true;
+  /// Logs every event the editor forwards, demonstrating "receive any event" with no UI
+  /// chrome. Cancelled in [dispose].
+  StreamSubscription<TiptapEvent>? _eventsSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _eventsSub = _bridge.events.listen(
+      (event) => debugPrint('tiptap event: ${event.name} ${event.payload}'),
+    );
+    // Simulate a native image upload for the paste demo: wait, then return a placeholder URL.
+    // A real host would upload the data URL in params and return the hosted URL. No backend here.
+    _bridge.onRequest('uploadImage', (params) async {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      return 'https://picsum.photos/400';
+    });
+  }
 
   @override
   void dispose() {
+    _eventsSub?.cancel();
     _bridge.dispose();
     super.dispose();
-  }
-
-  /// Toggle the demo event subscriptions, demonstrating subscribe/unsubscribe.
-  void _toggleEvents() {
-    setState(() => _eventsOn = !_eventsOn);
-    for (final event in ['focus', 'blur', 'update']) {
-      _eventsOn ? _bridge.subscribe(event) : _bridge.unsubscribe(event);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Tiptap Mobile Bridge'),
-        actions: [
-          // Demo: pause/resume the event subscriptions (subscribe/unsubscribe).
-          IconButton(
-            tooltip: _eventsOn ? 'Pause events' : 'Resume events',
-            onPressed: _toggleEvents,
-            icon: Icon(_eventsOn ? Icons.pause : Icons.play_arrow),
-          ),
-        ],
-        // Demo: the latest editor event received over the bridge. Proves "receive any
-        // event" (driven by the subscribe() calls in onLoadStop below).
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(20),
-          child: StreamBuilder<TiptapEvent>(
-            stream: _bridge.events,
-            builder: (context, snapshot) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                snapshot.hasData ? 'event: ${snapshot.data!.name}' : 'event: —',
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),
-          ),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Tiptap Mobile Bridge')),
       body: Column(
         children: [
-          // Native toolbar — its buttons send commands and reflect editor state,
+          // Native toolbar: its buttons send commands and reflect editor state,
           // both carried over the JSON bridge. No HTML toolbar is used.
           ValueListenableBuilder<Map<String, CommandState>>(
             valueListenable: _bridge.commandStates,
@@ -90,7 +75,7 @@ class _EditorPageState extends State<EditorPage> {
               onWebViewCreated: _bridge.attach,
               onLoadStop: (controller, url) async {
                 await _bridge.init();
-                // Demo subscriptions — drive the AppBar event line above.
+                // Subscribe to a few editor events for the demo; they flow for the editor's lifetime.
                 _bridge.subscribe('focus');
                 _bridge.subscribe('blur');
                 _bridge.subscribe('update');
