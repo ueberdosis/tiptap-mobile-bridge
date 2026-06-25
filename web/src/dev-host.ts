@@ -1,4 +1,4 @@
-import type { Command, OutboundMessage } from './protocol'
+import type { Command, CommandState, OutboundMessage, SelectionState } from './protocol'
 
 /**
  * Dev-only "native host" simulator.
@@ -31,15 +31,16 @@ window.addEventListener('message', (event: MessageEvent) => {
 
   if (m.type === 'event') {
     if (m.name === 'selectionChanged') {
-      const { from, to } = m.payload.selection
+      const payload = m.payload as { selection: SelectionState; commandStates: Record<string, CommandState> }
+      const { from, to } = payload.selection
       append(`← event selectionChanged  @${from}-${to}`)
       // Reflect active formatting on the toolbar (proves event-driven state sync).
       for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-exec]')) {
         const cmd = btn.dataset.exec!
-        btn.dataset.active = String(m.payload.commandStates[cmd]?.isActive === true)
+        btn.dataset.active = String(payload.commandStates[cmd]?.isActive === true)
       }
     } else {
-      append(`← event ${m.name}  ${JSON.stringify(m.payload)}`)
+      append(`← event ${m.name}  ${JSON.stringify(m.payload ?? {})}`)
     }
     return
   }
@@ -59,6 +60,9 @@ document.querySelector('#host')!.addEventListener('click', (event) => {
   if (!button) return
   if (button.dataset.cmd === 'init') send('init')
   else if (button.dataset.cmd === 'getJSON') send('getJSON')
+  else if (button.dataset.cmd === 'getHTML') send('getHTML')
+  else if (button.dataset.subscribe) send('subscribe', { event: button.dataset.subscribe })
+  else if (button.dataset.unsubscribe) send('unsubscribe', { event: button.dataset.unsubscribe })
   else if (button.dataset.exec) {
     const args = button.dataset.args ? (JSON.parse(button.dataset.args) as unknown[]) : undefined
     send('exec', { command: button.dataset.exec, args })

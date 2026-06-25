@@ -12,6 +12,15 @@ class CommandState {
   final bool isActive;
 }
 
+/// A generic editor event forwarded over the bridge. `name` is the Tiptap event name
+/// (e.g. `focus`, `blur`, `update`); `payload` is its JSON projection.
+class TiptapEvent {
+  const TiptapEvent(this.name, this.payload);
+
+  final String name;
+  final Map<String, dynamic> payload;
+}
+
 /// Drives a Tiptap editor running inside an [InAppWebView] over the JSON protocol.
 ///
 /// Commands are sent to the editor via `window.tiptapBridge.handleCommand`;
@@ -24,6 +33,12 @@ class TiptapBridge {
 
   /// Latest per-command state (from selectionChanged); drives toolbar buttons.
   final ValueNotifier<Map<String, CommandState>> commandStates = ValueNotifier({});
+
+  final StreamController<TiptapEvent> _events = StreamController<TiptapEvent>.broadcast();
+
+  /// Every editor event the editor sends — the four built-in ones plus any the host
+  /// subscribes to via [subscribe]. `selectionChanged` also updates [commandStates].
+  Stream<TiptapEvent> get events => _events.stream;
 
   /// Wire up the webview controller and register the inbound message handler.
   void attach(InAppWebViewController controller) {
@@ -47,14 +62,19 @@ class TiptapBridge {
       } else {
         completer?.completeError(msg['error'] ?? 'command failed');
       }
-    } else if (type == 'event' && msg['name'] == 'selectionChanged') {
-      final states = msg['payload']['commandStates'] as Map<String, dynamic>;
-      commandStates.value = states.map(
-        (key, value) => MapEntry(
-          key,
-          CommandState(canExec: value['canExec'] == true, isActive: value['isActive'] == true),
-        ),
-      );
+    } else if (type == 'event') {
+      final name = msg['name'] as String;
+      final payload = (msg['payload'] as Map<String, dynamic>?) ?? const {};
+      if (name == 'selectionChanged') {
+        final states = payload['commandStates'] as Map<String, dynamic>;
+        commandStates.value = states.map(
+          (key, value) => MapEntry(
+            key,
+            CommandState(canExec: value['canExec'] == true, isActive: value['isActive'] == true),
+          ),
+        );
+      }
+      _events.add(TiptapEvent(name, payload));
     }
   }
 
@@ -81,5 +101,16 @@ class TiptapBridge {
 
   Future<Object?> getJson() => _send('getJSON');
 
-  void dispose() => commandStates.dispose();
+  Future<Object?> getHtml() => _send('getHTML');
+
+  /// Start receiving the named Tiptap editor event on the [events] stream.
+  Future<void> subscribe(String event) => _send('subscribe', params: {'event': event});
+
+  /// Stop receiving the named Tiptap editor event.
+  Future<void> unsubscribe(String event) => _send('unsubscribe', params: {'event': event});
+
+  void dispose() {
+    commandStates.dispose();
+    _events.close();
+  }
 }

@@ -5,11 +5,14 @@ import { TableKit } from '@tiptap/extension-table'
 import { TextAlign } from '@tiptap/extension-text-align'
 import StarterKit from '@tiptap/starter-kit'
 import { Bridge } from './bridge'
-import type { Command, CommandState, EditorEvent, ExecParams } from './protocol'
+import type { Command, CommandState, EditorEvent, ExecParams, SubscribeParams } from './protocol'
 import './editor.css'
 
 const bridge = new Bridge()
 let editor: Editor | null = null
+
+/** Tiptap editor event names the host has subscribed to (via the `subscribe` command). */
+const subscriptions = new Set<string>()
 
 /** Coalesce rapid selection/state updates into at most one message per `ms`. */
 function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: number): (...args: A) => void {
@@ -121,13 +124,60 @@ const emitSelection = debounce((ed: Editor) => {
   })
 }, 10)
 
+/**
+ * Tiptap editor events a host can `subscribe` to. Excludes lifecycle events that fire during
+ * construction (`create`/`beforeCreate`/`mount`) — unreachable by a post-init subscribe.
+ */
+const FORWARDED_EVENTS = [
+  'focus',
+  'blur',
+  'update',
+  'selectionUpdate',
+  'transaction',
+  'paste',
+  'drop',
+  'destroy',
+  'contentError',
+] as const
+
+/**
+ * Minimal JSON-safe payload for a forwarded editor event. Raw Tiptap payloads hold live objects
+ * (Editor, Transaction, EditorState, DOM events) that can't cross the bridge, so each event is
+ * projected to the bits that serialize. For paste/drop the inserted content lands in the doc —
+ * fetch it via `getJSON`/`getHTML` after the event.
+ */
+function projectEvent(name: string, ed: Editor, props: unknown): Record<string, unknown> {
+  const p = props as {
+    transaction?: { docChanged?: boolean }
+    error?: { message?: string }
+    event?: { clipboardData?: { types?: readonly string[] }; dataTransfer?: { types?: readonly string[] } }
+    moved?: boolean
+  }
+  switch (name) {
+    case 'contentError':
+      return { message: String(p?.error?.message ?? 'content error') }
+    case 'paste':
+      return { types: Array.from(p?.event?.clipboardData?.types ?? []) }
+    case 'drop':
+      return { types: Array.from(p?.event?.dataTransfer?.types ?? []), moved: p?.moved === true }
+    case 'update':
+    case 'selectionUpdate':
+    case 'transaction': {
+      const { from, to, empty } = ed.state.selection
+      return { selection: { from, to, empty }, docChanged: p?.transaction?.docChanged === true }
+    }
+    default:
+      return {} // focus, blur, destroy
+  }
+}
+
 function handleInit(command: Command): void {
   if (editor) {
     fail(command.id, 'ALREADY_INITIALIZED', 'editor already initialized')
     return
   }
   const params = (command.params ?? {}) as { content?: unknown; editable?: boolean }
-  editor = new Editor({
+  const created = new Editor({
     element: document.querySelector<HTMLElement>('#editor')!,
     extensions: [
       StarterKit,
@@ -159,6 +209,16 @@ function handleInit(command: Command): void {
     },
     onSelectionUpdate: ({ editor: ed }) => emitSelection(ed),
   })
+  editor = created
+  // Forward any subscribed Tiptap event as a generic, JSON-projected event.
+  const on = created.on.bind(created) as (event: string, fn: (props: unknown) => void) => void
+  for (const name of FORWARDED_EVENTS) {
+    on(name, (props) => {
+      if (subscriptions.has(name)) {
+        send({ type: 'event', name, payload: projectEvent(name, created, props) })
+      }
+    })
+  }
   ok(command.id)
 }
 
@@ -201,6 +261,10 @@ function handleCommand(command: Command): void {
         ok(command.id, editor.getJSON())
         return
       }
+      case 'getHTML': {
+        ok(command.id, editor.getHTML())
+        return
+      }
       case 'setTextSelection': {
         const params = (command.params ?? {}) as { from: number; to?: number }
         const selection = params.to === undefined ? params.from : { from: params.from, to: params.to }
@@ -211,6 +275,18 @@ function handleCommand(command: Command): void {
       case 'focus': {
         const params = (command.params ?? {}) as { position?: 'start' | 'end' | 'all' }
         editor.commands.focus(params.position)
+        ok(command.id)
+        return
+      }
+      case 'subscribe': {
+        const { event } = (command.params ?? {}) as SubscribeParams
+        subscriptions.add(event)
+        ok(command.id)
+        return
+      }
+      case 'unsubscribe': {
+        const { event } = (command.params ?? {}) as SubscribeParams
+        subscriptions.delete(event)
         ok(command.id)
         return
       }

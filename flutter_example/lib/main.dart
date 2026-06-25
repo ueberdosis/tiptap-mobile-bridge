@@ -28,16 +28,52 @@ class EditorPage extends StatefulWidget {
 class _EditorPageState extends State<EditorPage> {
   final TiptapBridge _bridge = TiptapBridge();
 
+  /// Whether we're currently subscribed to the demo events (focus/blur/update).
+  bool _eventsOn = true;
+
   @override
   void dispose() {
     _bridge.dispose();
     super.dispose();
   }
 
+  /// Toggle the demo event subscriptions, demonstrating subscribe/unsubscribe.
+  void _toggleEvents() {
+    setState(() => _eventsOn = !_eventsOn);
+    for (final event in ['focus', 'blur', 'update']) {
+      _eventsOn ? _bridge.subscribe(event) : _bridge.unsubscribe(event);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tiptap Mobile Bridge')),
+      appBar: AppBar(
+        title: const Text('Tiptap Mobile Bridge'),
+        actions: [
+          // Demo: pause/resume the event subscriptions (subscribe/unsubscribe).
+          IconButton(
+            tooltip: _eventsOn ? 'Pause events' : 'Resume events',
+            onPressed: _toggleEvents,
+            icon: Icon(_eventsOn ? Icons.pause : Icons.play_arrow),
+          ),
+        ],
+        // Demo: the latest editor event received over the bridge. Proves "receive any
+        // event" (driven by the subscribe() calls in onLoadStop below).
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(20),
+          child: StreamBuilder<TiptapEvent>(
+            stream: _bridge.events,
+            builder: (context, snapshot) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                snapshot.hasData ? 'event: ${snapshot.data!.name}' : 'event: —',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
+        ),
+      ),
       body: Column(
         children: [
           // Native toolbar — its buttons send commands and reflect editor state,
@@ -52,8 +88,12 @@ class _EditorPageState extends State<EditorPage> {
             child: InAppWebView(
               initialFile: 'assets/editor.html',
               onWebViewCreated: _bridge.attach,
-              onLoadStop: (controller, url) {
-                _bridge.init();
+              onLoadStop: (controller, url) async {
+                await _bridge.init();
+                // Demo subscriptions — drive the AppBar event line above.
+                _bridge.subscribe('focus');
+                _bridge.subscribe('blur');
+                _bridge.subscribe('update');
               },
             ),
           ),
@@ -159,6 +199,17 @@ class _Toolbar extends StatelessWidget {
               );
             },
             icon: const Icon(Icons.data_object),
+          ),
+          IconButton(
+            tooltip: 'Get HTML',
+            onPressed: () async {
+              final html = await bridge.getHtml();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(html.toString(), maxLines: 4)),
+              );
+            },
+            icon: const Icon(Icons.code),
           ),
         ],
       ),
