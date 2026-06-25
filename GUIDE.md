@@ -184,9 +184,9 @@ code**:
    extensions: [StarterKit, MyExtension],
    ```
 2. Rebuild the bundle and recopy it (see [Quick start](#quick-start)).
-3. Drive it from native with `exec` and the command name:
+3. Drive it from native with `exec` and the command name (args are positional):
    ```dart
-   bridge.exec('myCommand', {'some': 'arg'});
+   bridge.exec('myCommand', ['arg']);
    ```
 4. If you want a **toolbar button that reflects active state**, add its command to
    `TOOLBAR_COMMANDS` in `main.ts` (and add the native button). Read the gotcha below first —

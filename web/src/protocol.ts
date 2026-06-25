@@ -14,7 +14,7 @@ export type Command = {
   type: 'command'
   /** Correlation id; the matching response echoes it back. */
   id: string
-  /** Command name, e.g. `init`, `exec`, `getJSON`, `setContent`, `setTextSelection`, `focus`. */
+  /** Command name: `init`, `exec`, `getJSON`, `getHTML`, `setContent`, `setTextSelection`, `focus`, `subscribe`, `unsubscribe`. */
   name: string
   params?: Record<string, unknown>
 }
@@ -46,7 +46,13 @@ export type CommandState = { canExec: boolean; isActive: boolean }
 /** The current selection as ProseMirror document positions. */
 export type SelectionState = { from: number; to: number; empty: boolean }
 
-/** An asynchronous, one-way notification from the editor to the host (no reply). */
+/**
+ * An asynchronous, one-way notification from the editor to the host (no reply). The four named
+ * events below are always emitted. Any other Tiptap editor event (`focus`, `blur`, `update`,
+ * `selectionUpdate`, `transaction`, `paste`, `drop`, `destroy`, `contentError`) is delivered as a
+ * generic event once the host sends a `subscribe` command — its payload is a JSON projection
+ * (raw Tiptap payloads hold live Editor/Transaction objects that can't cross the bridge).
+ */
 export type EditorEvent =
   | { type: 'event'; name: 'ready'; payload: Record<string, never> }
   | {
@@ -60,6 +66,10 @@ export type EditorEvent =
       payload: { selection: SelectionState; commandStates: Record<string, CommandState> }
     }
   | { type: 'event'; name: 'contentChanged'; payload: Record<string, never> }
+  | { type: 'event'; name: string; payload?: Record<string, unknown> }
+
+/** Params for `subscribe` / `unsubscribe`: the Tiptap editor event name to start/stop receiving. */
+export type SubscribeParams = { event: string }
 
 /** Anything the editor sends outbound to the host. */
 export type OutboundMessage = Response | EditorEvent
