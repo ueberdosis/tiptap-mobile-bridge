@@ -74,4 +74,4 @@ TiptapBridgeExample/
 ## Protocol
 
 See [PROTOCOL.md](../PROTOCOL.md) for the wire contract (commands, events, errors) and
-[GUIDE.md](../GUIDE.md#ios--wkwebview--reference-wiring) for the iOS transport notes.
+[GUIDE.md](../GUIDE.md#transport-per-platform) for the iOS transport notes.
