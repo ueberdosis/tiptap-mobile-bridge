@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'tiptap_bridge.dart';
 
@@ -154,6 +156,15 @@ class _Toolbar extends StatelessWidget {
     await bridge.exec('setLink', [{'href': href}]);
   }
 
+  /// Open the native gallery picker, then insert the chosen image over the bridge as a data URL.
+  Future<void> _pickAndInsertImage() async {
+    final file = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    final dataUrl = 'data:${file.mimeType ?? 'image/jpeg'};base64,${base64Encode(bytes)}';
+    await bridge.exec('setImage', [{'src': dataUrl}]);
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -195,6 +206,12 @@ class _Toolbar extends StatelessWidget {
               );
             },
             icon: const Icon(Icons.code),
+          ),
+          // Open the native photo picker, then insert the chosen image over the bridge.
+          IconButton(
+            tooltip: 'Insert image',
+            onPressed: () => _pickAndInsertImage(),
+            icon: const Icon(Icons.image),
           ),
         ],
       ),

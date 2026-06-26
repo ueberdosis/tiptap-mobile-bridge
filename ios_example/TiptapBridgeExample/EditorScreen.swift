@@ -1,4 +1,6 @@
+import PhotosUI
 import SwiftUI
+import UIKit
 
 /// The single screen: a native toolbar over the editor webview. The toolbar's buttons send
 /// `exec` commands and reflect active state, both carried over the JSON bridge; the editor
@@ -8,6 +10,13 @@ struct EditorScreen: View {
 
     /// Content fetched by Get JSON / Get HTML, shown in a sheet.
     @State private var info: InfoText?
+
+    /// URL entry state for the link prompt, the native counterpart to Flutter's `_promptLink` dialog.
+    @State private var showLinkPrompt = false
+    @State private var linkURL = ""
+
+    /// Whether the native photo picker is presented.
+    @State private var showImagePicker = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -55,15 +64,47 @@ struct EditorScreen: View {
                     .accessibilityLabel(item.label)
                 }
 
+                // The link button needs a URL before it can run setLink, so it prompts rather than
+                // exec-ing directly. Rendered apart from ToolItem.all, mirroring Flutter's _promptLink.
+                Button { showLinkPrompt = true } label: {
+                    Image(systemName: "link").frame(minWidth: 28)
+                }
+                .buttonStyle(.bordered)
+                .tint(isActive("link") ? .accentColor : .secondary)
+                .accessibilityLabel("Link")
+
                 Divider().frame(height: 24)
 
                 Button("JSON") { fetch("getJSON") { try await bridge.getJSON() } }
                     .buttonStyle(.bordered)
                 Button("HTML") { fetch("getHTML") { try await bridge.getHTML() } }
                     .buttonStyle(.bordered)
+
+                // Open the native photo picker, then insert the chosen image over the bridge.
+                Button {
+                    showImagePicker = true
+                } label: {
+                    Image(systemName: "photo").frame(minWidth: 28)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Insert image")
             }
             .padding(.horizontal)
             .padding(.vertical, 6)
+        }
+        .alert("Add link", isPresented: $showLinkPrompt) {
+            TextField("https://example.com", text: $linkURL)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+            Button("Cancel", role: .cancel) { linkURL = "" }
+            Button("Add") { applyLink() }
+        }
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker { dataURL in
+                showImagePicker = false
+                guard let dataURL else { return }
+                Task { try? await bridge.exec("setImage", [["src": dataURL]]) }
+            }
         }
     }
 
@@ -73,6 +114,12 @@ struct EditorScreen: View {
     /// header event line lights up as the user interacts. Mirrors the Flutter onLoadStop hook.
     private func start() {
         Task {
+            // Answer the editor's uploadImage host request with a placeholder URL (no real backend),
+            // mirroring the Flutter app. Registered before init so a paste can never race ahead of it.
+            bridge.onRequest("uploadImage") { _ in
+                try await Task.sleep(for: .seconds(1))
+                return "https://picsum.photos/400"
+            }
             do {
                 try await bridge.initEditor()
                 try await bridge.subscribe("focus")
@@ -85,6 +132,15 @@ struct EditorScreen: View {
 
     private func isActive(_ key: String) -> Bool {
         bridge.commandStates[key]?.isActive ?? false
+    }
+
+    /// Apply the URL entered in the link prompt as a link over the bridge, then clear the field.
+    /// Empty input is a no-op, matching the Flutter prompt.
+    private func applyLink() {
+        let href = linkURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        linkURL = ""
+        guard !href.isEmpty else { return }
+        Task { try? await bridge.exec("setLink", [["href": href]]) }
     }
 
     /// Run a content-fetch command and present its result (or the error) in the sheet.
@@ -114,8 +170,17 @@ private struct ToolItem: Identifiable {
     static let all: [ToolItem] = [
         ToolItem(key: "bold", command: "toggleBold", args: nil, systemImage: "bold", label: "Bold"),
         ToolItem(key: "italic", command: "toggleItalic", args: nil, systemImage: "italic", label: "Italic"),
+        ToolItem(key: "underline", command: "toggleUnderline", args: nil, systemImage: "underline", label: "Underline"),
+        ToolItem(key: "strike", command: "toggleStrike", args: nil, systemImage: "strikethrough", label: "Strikethrough"),
+        ToolItem(key: "highlight", command: "toggleHighlight", args: nil, systemImage: "highlighter", label: "Highlight"),
         ToolItem(key: "h1", command: "toggleHeading", args: [["level": 1]], systemImage: "1.square", label: "Heading 1"),
+        ToolItem(key: "h2", command: "toggleHeading", args: [["level": 2]], systemImage: "2.square", label: "Heading 2"),
         ToolItem(key: "bulletList", command: "toggleBulletList", args: nil, systemImage: "list.bullet", label: "Bullet list"),
+        ToolItem(key: "taskList", command: "toggleTaskList", args: nil, systemImage: "checklist", label: "Task list"),
+        ToolItem(key: "alignLeft", command: "setTextAlign", args: ["left"], systemImage: "text.alignleft", label: "Align left"),
+        ToolItem(key: "alignCenter", command: "setTextAlign", args: ["center"], systemImage: "text.aligncenter", label: "Align center"),
+        ToolItem(key: "alignRight", command: "setTextAlign", args: ["right"], systemImage: "text.alignright", label: "Align right"),
+        ToolItem(key: "table", command: "insertTable", args: [["rows": 3, "cols": 3, "withHeaderRow": true] as [String: Any]], systemImage: "tablecells", label: "Insert table"),
     ]
 }
 
@@ -145,6 +210,44 @@ private struct ContentSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+        }
+    }
+}
+
+/// A native photo picker (`PHPickerViewController`). Returns the chosen image as a base64 JPEG data
+/// URL, or nil if the user cancels. PHPicker runs out of process, so it needs no photo permission.
+struct ImagePicker: UIViewControllerRepresentable {
+    let onPicked: (String?) -> Void
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: PHPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPicked: onPicked) }
+
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        private let onPicked: (String?) -> Void
+
+        init(onPicked: @escaping (String?) -> Void) { self.onPicked = onPicked }
+
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {
+                onPicked(nil)
+                return
+            }
+            provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+                let dataURL = (object as? UIImage)
+                    .flatMap { $0.jpegData(compressionQuality: 0.8) }
+                    .map { "data:image/jpeg;base64,\($0.base64EncodedString())" }
+                DispatchQueue.main.async { self?.onPicked(dataURL) }
             }
         }
     }

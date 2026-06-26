@@ -5,8 +5,8 @@ import WebKit
 ///
 /// On creation it registers the `tiptapBridge` script-message handler (so the editor detects
 /// the iOS platform and routes outbound messages here) and loads `editor.html` from the app
-/// bundle (offline, no server). `onReady` fires once the page has finished loading, which is
-/// when the host should send `init`.
+/// bundle (offline, no server). `onReady` fires once the page has loaded and the inbound bridge
+/// is installed, which is when the host should send `init`.
 struct EditorWebView: UIViewRepresentable {
     let bridge: TiptapBridge
     let onReady: () -> Void
@@ -67,7 +67,28 @@ struct EditorWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            onReady()
+            // The editor bundle is an ES module, so `window.tiptapBridge` is not guaranteed to
+            // exist the instant navigation finishes (module execution can lag didFinish). Poll
+            // until the inbound bridge is installed before firing onReady, which sends `init`.
+            waitForBridge(webView, attemptsLeft: 40)
+        }
+
+        /// Poll for the editor's inbound bridge, then fire onReady. Retries every 50ms (up to
+        /// about 2s) to absorb the gap between didFinish and module execution, then gives up and
+        /// fires anyway so a genuine failure still surfaces in logs rather than hanging silently.
+        private func waitForBridge(_ webView: WKWebView, attemptsLeft: Int) {
+            webView.evaluateJavaScript("!!(window.tiptapBridge && window.tiptapBridge.handleCommand)") { [weak self] ready, _ in
+                guard let self else { return }
+                if ready as? Bool == true {
+                    self.onReady()
+                } else if attemptsLeft > 0 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        self.waitForBridge(webView, attemptsLeft: attemptsLeft - 1)
+                    }
+                } else {
+                    self.onReady()
+                }
+            }
         }
     }
 }

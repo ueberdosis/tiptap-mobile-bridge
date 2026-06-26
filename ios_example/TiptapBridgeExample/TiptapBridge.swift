@@ -40,6 +40,9 @@ final class TiptapBridge: NSObject, ObservableObject {
     private var nextId = 1
     private var pending: [String: CheckedContinuation<Any?, Error>] = [:]
 
+    /// Handlers the editor can invoke via a host request, keyed by request name. See `onRequest`.
+    private var requestHandlers: [String: ([String: Any]) async throws -> Any?] = [:]
+
     /// Wire up the webview the bridge sends commands into. Inbound messages are delivered
     /// separately via the script-message handler (see `handle(message:)`).
     func attach(_ webView: WKWebView) {
@@ -85,9 +88,48 @@ final class TiptapBridge: NSObject, ObservableObject {
             }
             lastEvent = name
             print("[tiptap] event: \(name)")
+        case "hostRequest":
+            handleHostRequest(message)
         default:
             break
         }
+    }
+
+    // MARK: Host requests (editor -> host -> editor)
+
+    /// Register a handler the editor can invoke via a host request (e.g. `uploadImage`). The
+    /// handler's resolved value becomes the reply `result`; a thrown error becomes the reply
+    /// `error`. One handler per name: registering an existing name replaces it.
+    func onRequest(_ name: String, _ handler: @escaping ([String: Any]) async throws -> Any?) {
+        requestHandlers[name] = handler
+    }
+
+    /// Route an inbound host request to its registered handler and reply with the outcome: the
+    /// handler's resolved value as `result`, an unknown name or a thrown error as `error`. Mirrors
+    /// the Flutter host's `_handleHostRequest`.
+    private func handleHostRequest(_ message: [String: Any]) {
+        guard let id = message["id"] as? String, let name = message["name"] as? String else { return }
+        let params = message["params"] as? [String: Any] ?? [:]
+        guard let handler = requestHandlers[name] else {
+            reply(id: id, ok: false, error: ["code": "UNKNOWN_REQUEST", "message": "no handler for \"\(name)\""])
+            return
+        }
+        Task { @MainActor in
+            do {
+                reply(id: id, ok: true, result: try await handler(params))
+            } catch {
+                reply(id: id, ok: false, error: ["code": "REQUEST_FAILED", "message": "\(error)"])
+            }
+        }
+    }
+
+    /// Send a reply to a host request back to the editor via `window.tiptapBridge.handleReply`.
+    /// iOS only sends replies; it never receives a `hostReply`.
+    private func reply(id: String, ok: Bool, result: Any? = nil, error: [String: Any]? = nil) {
+        var payload: [String: Any] = ["type": "hostReply", "id": id, "ok": ok]
+        if let result { payload["result"] = result }
+        if let error { payload["error"] = error }
+        webView?.evaluateJavaScript(Self.bridgeCallJS("handleReply", payload))
     }
 
     // MARK: Outbound (host -> editor)
@@ -102,7 +144,7 @@ final class TiptapBridge: NSObject, ObservableObject {
         var command: [String: Any] = ["type": "command", "id": id, "name": name]
         if let params { command["params"] = params }
 
-        let js = Self.handleCommandJS(for: command)
+        let js = Self.bridgeCallJS("handleCommand", command)
         return try await withCheckedThrowingContinuation { continuation in
             pending[id] = continuation
             webView?.evaluateJavaScript(js) { [weak self] _, error in
@@ -114,19 +156,20 @@ final class TiptapBridge: NSObject, ObservableObject {
         }
     }
 
-    /// Build the inbound call `window.tiptapBridge.handleCommand("<escaped json>")`.
+    /// Build an inbound bridge call `window.tiptapBridge.<method>(<escaped json>)`.
     ///
-    /// The command is encoded twice: once to a JSON string, then again as a JSON string
-    /// literal so quotes/backslashes are escaped for embedding in JavaScript source. This
-    /// mirrors the Flutter host's `jsonEncode(jsonEncode(command))`.
-    private static func handleCommandJS(for command: [String: Any]) -> String {
+    /// The payload is encoded twice: once to a JSON string, then again as a JSON string literal so
+    /// quotes/backslashes are escaped for embedding in JavaScript source. This mirrors the Flutter
+    /// host's `jsonEncode(jsonEncode(...))`, and serves both `handleCommand` (outbound commands)
+    /// and `handleReply` (host-request replies).
+    private static func bridgeCallJS(_ method: String, _ payload: [String: Any]) -> String {
         guard
-            let inner = try? JSONSerialization.data(withJSONObject: command),
+            let inner = try? JSONSerialization.data(withJSONObject: payload),
             let innerString = String(data: inner, encoding: .utf8),
             let literal = try? JSONSerialization.data(withJSONObject: innerString, options: .fragmentsAllowed),
             let literalString = String(data: literal, encoding: .utf8)
         else { return "" }
-        return "window.tiptapBridge.handleCommand(\(literalString))"
+        return "window.tiptapBridge.\(method)(\(literalString))"
     }
 
     // MARK: Commands
