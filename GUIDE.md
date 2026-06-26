@@ -1,4 +1,4 @@
-# Tiptap Mobile Bridge — Integration Guide
+# Tiptap Mobile Bridge Integration Guide
 
 How to drive a Tiptap editor from a native app (Flutter / iOS / Android) by running the
 editor in a webview and talking to it over a small JSON protocol. For the wire format see
@@ -23,12 +23,12 @@ editor in a webview and talking to it over a small JSON protocol. For the wire f
 
 - **The webview renders the editor; native renders only the chrome.** This is the proven,
   low-risk path (how TenTap / Notion-style apps work) and it keeps **Tiptap's full extension
-  model** — a custom extension is just normal web code that renders in the webview, no native
+  model**: a custom extension is just normal web code that renders in the webview, no native
   port required.
 - **The protocol and the web bundle are shared across all platforms.** Only the thin native
   *transport* differs per platform.
 - The web side is built to a **single, self-contained HTML file** (everything inlined), so the
-  host loads it straight from the device filesystem — no network, no asset requests.
+  host loads it straight from the device filesystem, with no network or asset requests.
 
 ## Repo layout
 
@@ -42,10 +42,12 @@ web/                      TypeScript editor + bridge (the shared, platform-agnos
   dev.html                loads the dev host
   vite.config.ts          single-file build (vite-plugin-singlefile)
 
-flutter_example/          reference native host (the implemented, tested platform)
+flutter_example/          reference Flutter host (native toolbar + webview)
   lib/tiptap_bridge.dart  the bridge: id-correlated commands, events via a JS handler
   lib/main.dart           the app: a native toolbar + the webview
   assets/editor.html      the built web bundle (copied from web/dist/index.html)
+ios_example/              reference iOS host (SwiftUI + WKWebView), at parity with Flutter
+  TiptapBridgeExample/    the Swift bridge, screen, and WKWebView wrapper
 ```
 
 ## Quick start
@@ -66,7 +68,7 @@ flutter run
 ```
 
 Tap into the editor and type; use the native toolbar (bold / italic / underline / strike /
-highlight / H1 / H2 / lists / task list / align / link / table) — its buttons send `exec`
+highlight / H1 / H2 / lists / task list / align / link / table / image): its buttons send `exec`
 commands and light up from `selectionChanged` state, both over the bridge.
 
 ## Test without a device
@@ -95,9 +97,9 @@ auto-detects the platform (order: flutter → ios → android → browser).
 - **Outbound (editor → host):** command responses, events, and host requests; see each platform below.
 
 Async results are correlated by the command `id` **in the host**, not by any transport return
-value — so a plain one-way message channel is enough on every platform.
+value, so a plain one-way message channel is enough on every platform.
 
-### Flutter — implemented & tested ([`tiptap_bridge.dart`](./flutter_example/lib/tiptap_bridge.dart))
+### Flutter: implemented and tested ([`tiptap_bridge.dart`](./flutter_example/lib/tiptap_bridge.dart))
 
 Outbound uses a registered JS handler; inbound uses `evaluateJavascript`:
 
@@ -138,7 +140,7 @@ InAppWebView(
 
 > The bundle must be declared as a Flutter asset (`pubspec.yaml` → `flutter: assets: - assets/editor.html`).
 
-### iOS / WKWebView — reference wiring
+### iOS / WKWebView: implemented and tested ([`ios_example`](./ios_example))
 
 Outbound via a script-message handler; inbound via `evaluateJavaScript`:
 
@@ -150,12 +152,16 @@ config.userContentController.add(self, name: "tiptapBridge")
 // func userContentController(_:didReceive message: WKScriptMessage) { let json = message.body as! String; … }
 
 // Inbound: host → editor. Encode the command JSON as a JS string literal (escapes it),
-// then call the entry point — same idea as Flutter's double-encode.
+// then call the entry point, the same idea as Flutter's double-encode.
 let literal = String(data: try! JSONSerialization.data(withJSONObject: commandJson, options: .fragmentsAllowed), encoding: .utf8)!
 webView.evaluateJavaScript("window.tiptapBridge.handleCommand(\(literal))")
 ```
 
-### Android / WebView — reference wiring
+> Send the first command only after `window.tiptapBridge` exists: `WKWebView`'s `didFinish` can
+> fire before the editor's module installs it, so poll for it before `init` (see
+> `ios_example`'s `EditorWebView.swift`).
+
+### Android / WebView: reference wiring
 
 Outbound via a `@JavascriptInterface`; inbound via `evaluateJavascript`:
 
@@ -170,35 +176,66 @@ webView.addJavascriptInterface(object {
 webView.evaluateJavascript("window.tiptapBridge.handleCommand(${JSONObject.quote(jsonString)})", null)
 ```
 
-### Browser — dev only
+### Browser: dev only
 
 Every direction uses `window.postMessage` with `source` tags (`tiptap-host` inbound, including host
 replies; `tiptap-editor` outbound, including host requests); this is exactly what the dev host uses.
 
-> Only the **Flutter** host is implemented and tested in this POC. The iOS/Android snippets
-> are the reference wiring the protocol expects — the web side already detects and targets
-> all four carriers.
+> The **Flutter** and **iOS** hosts are implemented and tested in this POC (`flutter_example/`
+> and `ios_example/`). The Android snippet is the reference wiring the protocol expects; the web
+> side already detects and targets all four carriers.
+
+## Use the bridge in your own app
+
+The example apps are runnable hosts, but the goal is to drop the bridge into *your* app. Two
+parts are reusable as-is; the rest is example UI you replace:
+
+- **The web bundle** (the editor plus the protocol): you own and customize it.
+- **The native bridge** (one self-contained file per platform): copy it in.
+
+A real integration is six steps:
+
+1. **Take the web project.** Copy [`web/`](./web) into your repo. It is a small Vite project (a
+   few source files plus a single-file build config), and it is the editor you ship.
+2. **Use your own extensions.** The extension set is the one place the bundle is yours, not
+   generic. Edit the `extensions` array in [`web/src/main.ts`](./web/src/main.ts) to what your app
+   needs (it is `StarterKit` plus a few defaults today). This is plain Tiptap with no native code;
+   see [Adding a custom extension](#adding-a-custom-extension).
+3. **Build the bundle.** `npm run build` writes `web/dist/index.html`, a single inlined file with
+   no network or asset requests. A `postbuild` step copies it into the example apps; point it (or
+   copy by hand) into *your* app's assets instead.
+4. **Copy the native bridge.** It has no dependency on the example UI:
+   [`tiptap_bridge.dart`](./flutter_example/lib/tiptap_bridge.dart) for Flutter, or
+   [`TiptapBridge.swift`](./ios_example/TiptapBridgeExample/TiptapBridge.swift) plus
+   `EditorWebView.swift` for iOS. Load the built bundle into a webview and `attach` the bridge.
+5. **Build your toolbar.** A toolbar button is just `exec(command, args)`, reading active state
+   from the `selectionChanged` event. Render your own UI and call the bridge the same way; keep its
+   command keys in sync with `TOOLBAR_COMMANDS` in `main.ts` (the
+   [gotcha](#gotcha-probing-cans-side-effects) below is why that list is an allowlist).
+6. **Replace the demo upload.** The example `uploadImage` handler returns a placeholder URL
+   (`https://picsum.photos/400`) with no real backend. Swap it for your real upload before
+   shipping, or every image will resolve to the placeholder. The channel is the
+   [host request](./PROTOCOL.md) part of the protocol.
+
+There is no package to install: you copy the web project and the one native file and own them,
+which keeps every part open to change. If your editor differs only by extensions and toolbar,
+those are exactly steps 2 and 5.
 
 ## Adding a custom extension
 
-Because the editor lives in the webview, a custom extension is **plain Tiptap — no native
-code**:
+Because the editor lives in the webview, a custom extension is plain Tiptap with no native code.
+Add it to the `extensions` array in [`web/src/main.ts`](./web/src/main.ts) and rebuild (see
+[Quick start](#quick-start)); it is then reachable from native with no per-command glue:
 
-1. Add it to the editor in [`web/src/main.ts`](./web/src/main.ts):
-   ```ts
-   extensions: [StarterKit, MyExtension],
-   ```
-2. Rebuild the bundle and recopy it (see [Quick start](#quick-start)).
-3. Drive it from native with `exec` and the command name (args are positional):
-   ```dart
-   bridge.exec('myCommand', ['arg']);
-   ```
-4. If you want a **toolbar button that reflects active state**, add its command to
-   `TOOLBAR_COMMANDS` in `main.ts` (and add the native button). Read the gotcha below first —
-   that list is an allowlist on purpose.
+```dart
+bridge.exec('myCommand', ['arg']);   // args are positional, spread into the command
+```
 
-`schemaReady` reports the live `nodes` / `marks` / `commands` at runtime, so a host can
-discover what an editor build supports instead of hard-coding it.
+For a toolbar button that reflects active state, add the command to `TOOLBAR_COMMANDS` in `main.ts`
+(see the [gotcha](#gotcha-probing-cans-side-effects) for why that list is an allowlist).
+
+`schemaReady` reports the live `nodes` / `marks` / `commands` at runtime, so a host can discover
+what an editor build supports instead of hard-coding it.
 
 ## Gotcha: probing `can()`'s side-effects
 
@@ -207,13 +244,13 @@ toolbar state for *any* host.
 
 - **Symptom:** typing in the editor dropped focus after about one keystroke on iOS.
 - **Cause:** to enable/disable toolbar buttons we probed each command with
-  `editor.can()[name]()`. `can()` runs a command in dry-run mode — but **some Tiptap commands
+  `editor.can()[name]()`. `can()` runs a command in dry-run mode, but **some Tiptap commands
   don't gate their side-effects behind `dispatch`**. `blur` unconditionally schedules
   `requestAnimationFrame(() => view.dom.blur())`. So probing *every* command on each selection
   change (i.e. every keystroke) blurred the editor a frame (~16 ms) later.
 - **How we proved it:** a focus/key event probe inside the webview showed `blur` firing ~16 ms
-  (one `requestAnimationFrame` at 60 fps) after each `input` — and it still fired with all
-  native messaging stubbed out, which is what pointed at the editor side, not the transport.
+  (one `requestAnimationFrame` at 60 fps) after each `input`, and it still fired with all
+  native messaging stubbed out, which pointed at the editor side, not the transport.
 - **Fix:** probe only an **allowlist** of the commands the toolbar actually renders
   (`TOOLBAR_COMMANDS` in [`main.ts`](./web/src/main.ts)), never the full `editor.commands` set.
   A denylist would silently break the day someone adds another unguarded command.
@@ -224,6 +261,6 @@ commands you render.
 ## Keyboard / focus on the iOS simulator
 
 - The simulator hides the on-screen keyboard while **I/O ▸ Keyboard ▸ Connect Hardware
-  Keyboard** is on — type with your Mac keyboard, or toggle it off for the soft keyboard.
+  Keyboard** is on. Type with your Mac keyboard, or toggle it off for the soft keyboard.
 - With the `can()`/`blur` fix in place, typing holds focus. If you ever see focus loss again,
   rule out a command-probe side-effect (above) before suspecting the platform.
