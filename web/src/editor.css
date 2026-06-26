@@ -82,3 +82,13 @@ body {
   border-radius: 2px;
   padding: 0 0.1em;
 }
+
+/* Images (Image extension): scale down to the content width on any viewport, keep aspect ratio.
+   The same rule ships in the shared bundle, so an image added on the web stays responsive when
+   the document is opened on mobile, and vice versa. */
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.75em 0;
+}

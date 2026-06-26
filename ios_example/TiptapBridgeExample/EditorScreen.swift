@@ -1,4 +1,6 @@
+import PhotosUI
 import SwiftUI
+import UIKit
 
 /// The single screen: a native toolbar over the editor webview. The toolbar's buttons send
 /// `exec` commands and reflect active state, both carried over the JSON bridge; the editor
@@ -12,6 +14,9 @@ struct EditorScreen: View {
     /// URL entry state for the link prompt, the native counterpart to Flutter's `_promptLink` dialog.
     @State private var showLinkPrompt = false
     @State private var linkURL = ""
+
+    /// Whether the native photo picker is presented.
+    @State private var showImagePicker = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,6 +79,15 @@ struct EditorScreen: View {
                     .buttonStyle(.bordered)
                 Button("HTML") { fetch("getHTML") { try await bridge.getHTML() } }
                     .buttonStyle(.bordered)
+
+                // Open the native photo picker, then insert the chosen image over the bridge.
+                Button {
+                    showImagePicker = true
+                } label: {
+                    Image(systemName: "photo").frame(minWidth: 28)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Insert image")
             }
             .padding(.horizontal)
             .padding(.vertical, 6)
@@ -84,6 +98,13 @@ struct EditorScreen: View {
                 .keyboardType(.URL)
             Button("Cancel", role: .cancel) { linkURL = "" }
             Button("Add") { applyLink() }
+        }
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker { dataURL in
+                showImagePicker = false
+                guard let dataURL else { return }
+                Task { try? await bridge.exec("setImage", [["src": dataURL]]) }
+            }
         }
     }
 
@@ -189,6 +210,44 @@ private struct ContentSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+        }
+    }
+}
+
+/// A native photo picker (`PHPickerViewController`). Returns the chosen image as a base64 JPEG data
+/// URL, or nil if the user cancels. PHPicker runs out of process, so it needs no photo permission.
+struct ImagePicker: UIViewControllerRepresentable {
+    let onPicked: (String?) -> Void
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: PHPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPicked: onPicked) }
+
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        private let onPicked: (String?) -> Void
+
+        init(onPicked: @escaping (String?) -> Void) { self.onPicked = onPicked }
+
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {
+                onPicked(nil)
+                return
+            }
+            provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+                let dataURL = (object as? UIImage)
+                    .flatMap { $0.jpegData(compressionQuality: 0.8) }
+                    .map { "data:image/jpeg;base64,\($0.base64EncodedString())" }
+                DispatchQueue.main.async { self?.onPicked(dataURL) }
             }
         }
     }
