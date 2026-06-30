@@ -91,9 +91,12 @@ type HostReply = {
 | `unsubscribe`      | `{ event }`               | `(none)`                      |
 
 **`init`** creates the editor. `content` is an HTML string or ProseMirror JSON
-(default `"<p>Hello from Tiptap 👋</p>"`); `editable` defaults to `true`. On success it
-emits, in order, `schemaReady` → `ready` → `selectionChanged`, then responds `ok`. It must be
-the first command; sending it twice fails with `ALREADY_INITIALIZED`.
+(default `"<p>Hello from Tiptap 👋</p>"`); `editable` defaults to `true`. On success it responds
+`ok` first, then **asynchronously** emits `schemaReady` → `ready` → `selectionChanged`: the editor's
+create lifecycle runs on a later tick (and `selectionChanged` is additionally debounced), so these
+three arrive just *after* the `init` response, not before it. A host that needs the schema or the
+initial toolbar state should wait for those events rather than assume they precede the response. It
+must be the first command; sending it twice fails with `ALREADY_INITIALIZED`.
 
 **`exec`** runs *any* Tiptap command by name (the generic escape hatch). `args` is a
 **positional** array spread into the command (the editor runs
@@ -230,7 +233,7 @@ editor does not define them); the editor surfaces them as a rejected promise.
 ```
 1. Host loads the webview; the editor registers window.tiptapBridge.handleCommand.
 2. Host ──▶ init
-3. Host ◀── schemaReady, ready, selectionChanged   (then response ok for init)
+3. Host ◀── response ok for init   (then, asynchronously: schemaReady → ready → selectionChanged)
 4. Host ──▶ exec / getJSON / getHTML / setContent / subscribe / …   (each gets one response)
    Host ◀── selectionChanged / contentChanged       (always streamed as the user edits)
    Host ◀── focus / blur / update / …               (streamed only after subscribe)
