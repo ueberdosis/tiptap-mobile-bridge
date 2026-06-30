@@ -110,7 +110,7 @@ struct EditorScreen: View {
 
     // MARK: Actions
 
-    /// Initialize the editor once the page has loaded, then subscribe to focus/blur so the
+    /// Initialize the editor once the page has loaded, then subscribe to focus/blur/update so the
     /// header event line lights up as the user interacts. Mirrors the Flutter onLoadStop hook.
     private func start() {
         Task {
@@ -124,6 +124,7 @@ struct EditorScreen: View {
                 try await bridge.initEditor()
                 try await bridge.subscribe("focus")
                 try await bridge.subscribe("blur")
+                try await bridge.subscribe("update")
             } catch {
                 print("[tiptap] init failed: \(error)")
             }

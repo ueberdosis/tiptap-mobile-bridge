@@ -13,10 +13,11 @@ agnostic with runnable native code.
 - Inbound (host to editor) via `evaluateJavaScript("window.tiptapBridge.handleCommand(...)")`,
   passing the command JSON as a correctly escaped JS string literal.
 - Command responses correlated to their request by `id`, using Swift `async`/`await`.
-- On load: send `init`, then `subscribe` to `focus` and `blur`. Received events are logged to
+- On load: send `init`, then `subscribe` to `focus`, `blur`, and `update`. Received events are logged to
   the console and the latest one is shown in the header.
-- A native toolbar (Bold, Italic, H1, Bullet list) whose buttons send `exec` commands and
-  light up from `selectionChanged` state, plus Get JSON and Get HTML (content fetch on demand).
+- A native toolbar (bold, italic, underline, strike, highlight, headings, lists, align, link,
+  table) whose buttons send `exec` commands and light up from `selectionChanged` state, plus Get
+  JSON / Get HTML and a native image picker that inserts the chosen photo over the bridge.
 
 ## Requirements
 
