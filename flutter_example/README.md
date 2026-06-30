@@ -15,7 +15,8 @@ share the same web bundle and protocol.
 - Command responses correlated to their request by `id`, using a `Completer` per command.
 - On load: send `init`, then `subscribe` to `focus`, `blur`, and `update`; received events are
   logged with `debugPrint`.
-- A native toolbar (bold, italic, headings, lists, align, link, table) whose buttons send `exec`
+- A native toolbar (bold, italic, underline, strike, highlight, headings, lists, align, link,
+  table) whose buttons send `exec`
   commands and light up from `selectionChanged` state, plus Get JSON / Get HTML and a native image
   picker that inserts the chosen photo over the bridge.
 - An `uploadImage` host request: pasting an image asks the host to upload it and inserts the
