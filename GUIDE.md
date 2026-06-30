@@ -57,7 +57,7 @@ ios_example/              reference iOS host (SwiftUI + WKWebView), at parity wi
 ```bash
 cd web
 npm install
-npm run build           # → web/dist/index.html, then copied to flutter_example/assets/editor.html
+npm run build           # → web/dist/index.html, then copied into both example apps (Flutter + iOS)
 ```
 
 **2. Run the reference app** (iOS simulator or a real device):
@@ -257,6 +257,17 @@ toolbar state for *any* host.
 
 **Takeaway:** never enumerate `can()` over all commands to build UI state. Probe exactly the
 commands you render.
+
+## Security
+
+Treat everything the editor returns (`getJSON` / `getHTML`) as untrusted user input. The content
+you pass to `init` / `setContent` is parsed against the editor's schema, which drops tags and
+attributes it doesn't recognize — but schema parsing is **not** sanitization. Validate and sanitize
+on your server before you store the document or render it anywhere outside this editor.
+
+The bundle is loaded from the device filesystem with nothing fetched from the network — keep it that
+way. Don't point the webview at remote, untrusted HTML, and have your `uploadImage` (and any other
+host-request) handler validate what it accepts before acting on it.
 
 ## Keyboard / focus on the iOS simulator
 

@@ -21,7 +21,7 @@ agnostic with runnable native code.
 
 ## Requirements
 
-- Xcode 16 or newer (the project uses a synchronized file group, `objectVersion` 77).
+- Xcode 16 or newer (the project uses a synchronized file group, `objectVersion` 71).
 - An iOS 17 or newer simulator or device.
 
 ## Build and run

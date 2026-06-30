@@ -125,11 +125,31 @@ class TiptapBridge {
     };
     // Pass the command as a JSON string argument to the editor's inbound handler.
     final js = 'window.tiptapBridge.handleCommand(${jsonEncode(jsonEncode(command))})';
-    _controller?.evaluateJavascript(source: js);
+    final controller = _controller;
+    if (controller == null) {
+      // No webview attached: fail fast instead of leaving the caller awaiting forever.
+      _pending.remove(id)?.completeError(StateError('TiptapBridge: not attached to a webview'));
+      return completer.future;
+    }
+    // A failed inbound eval means the editor never received the command, so its id-correlated
+    // response will never arrive: fail the pending call now instead of leaving the caller
+    // awaiting forever (mirrors the iOS host's evaluateJavaScript error handling).
+    controller.evaluateJavascript(source: js).catchError((Object error) {
+      _pending.remove(id)?.completeError(error);
+    });
     return completer.future;
   }
 
-  Future<void> init() => _send('init');
+  /// Create the editor (must be the first command sent). Pass [content] (an HTML string or
+  /// ProseMirror JSON) to open a saved document, and `editable: false` for a read-only view;
+  /// both are optional and fall back to the web side's defaults.
+  Future<void> init({Object? content, bool? editable}) {
+    final params = <String, dynamic>{
+      if (content != null) 'content': content,
+      if (editable != null) 'editable': editable,
+    };
+    return _send('init', params: params.isEmpty ? null : params);
+  }
 
   Future<void> exec(String command, [List<dynamic>? args]) =>
       _send('exec', params: {'command': command, if (args != null) 'args': args});

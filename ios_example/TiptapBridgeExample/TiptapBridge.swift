@@ -146,8 +146,15 @@ final class TiptapBridge: NSObject, ObservableObject {
 
         let js = Self.bridgeCallJS("handleCommand", command)
         return try await withCheckedThrowingContinuation { continuation in
+            // No webview attached: fail fast instead of leaving the continuation un-resumed.
+            guard let webView else {
+                continuation.resume(throwing: TiptapError(
+                    code: "NO_WEBVIEW", message: "bridge is not attached to a webview"
+                ))
+                return
+            }
             pending[id] = continuation
-            webView?.evaluateJavaScript(js) { [weak self] _, error in
+            webView.evaluateJavaScript(js) { [weak self] _, error in
                 // A JS evaluation error means the editor never received the command, so the
                 // id-correlated response will never arrive: fail the pending call now.
                 guard let error else { return }
@@ -174,8 +181,15 @@ final class TiptapBridge: NSObject, ObservableObject {
 
     // MARK: Commands
 
-    /// Create the editor. Must be the first command sent.
-    func initEditor() async throws { try await send("init") }
+    /// Create the editor (must be the first command sent). Pass `content` (an HTML string or
+    /// ProseMirror JSON) to open a saved document, and `editable: false` for a read-only view;
+    /// both are optional and fall back to the web side's defaults.
+    func initEditor(content: Any? = nil, editable: Bool? = nil) async throws {
+        var params: [String: Any] = [:]
+        if let content { params["content"] = content }
+        if let editable { params["editable"] = editable }
+        try await send("init", params: params.isEmpty ? nil : params)
+    }
 
     /// Run any Tiptap command by name. `args` are positional and spread into the command.
     func exec(_ command: String, _ args: [Any]? = nil) async throws {
