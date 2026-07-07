@@ -1,6 +1,6 @@
 # Tiptap Mobile Bridge Protocol
 
-The native host (Flutter / iOS / Android / a browser tab) and a Tiptap editor running
+The native host (Flutter / iOS / Android / React Native / a browser tab) and a Tiptap editor running
 inside a webview communicate purely through **JSON messages**. This document is the wire
 contract; it is identical on every platform, and only the carrier of the JSON differs (see
 [GUIDE.md](./GUIDE.md#transport-per-platform)).
@@ -249,8 +249,9 @@ for its platform and always calls the same inbound entry point:
 - **Outbound (editor → host):** Flutter `flutter_inappwebview.callHandler('tiptapBridge', json)`
   · iOS `webkit.messageHandlers.tiptapBridge.postMessage(json)`
   · Android `AndroidTiptapBridge.postMessage(json)`
+  · React Native `ReactNativeWebView.postMessage(json)`
   · browser `window.postMessage({ source: 'tiptap-editor', message })`
 
 Platform is auto-detected in [`web/src/bridge.ts`](./web/src/bridge.ts) (order:
-flutter → ios → android → browser). Native wiring for each is in
+flutter → ios → android → react native → browser). Native wiring for each is in
 [GUIDE.md](./GUIDE.md#transport-per-platform).
