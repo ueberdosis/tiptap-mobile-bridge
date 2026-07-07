@@ -1,6 +1,6 @@
 import type { Command, HostReply, OutboundMessage } from './protocol'
 
-type Platform = 'flutter' | 'ios' | 'android' | 'browser'
+type Platform = 'flutter' | 'ios' | 'android' | 'reactnative' | 'browser'
 
 /** How long a host request waits for its reply before rejecting, so a silent host cannot hang the editor. */
 const REQUEST_TIMEOUT_MS = 30_000
@@ -19,6 +19,11 @@ declare global {
     webkit?: { messageHandlers?: { tiptapBridge?: { postMessage: (msg: string) => void } } }
     AndroidTiptapBridge?: { postMessage: (msg: string) => void }
     /**
+     * React Native host via react-native-webview: web -> native through postMessage. The webview
+     * injects this only when it has an `onMessage` prop set, so its presence marks the platform.
+     */
+    ReactNativeWebView?: { postMessage: (msg: string) => void }
+    /**
      * Inbound entry points the native host calls (via evaluateJavaScript): `handleCommand`
      * delivers a command, `handleReply` delivers a reply to a host request.
      */
@@ -33,6 +38,7 @@ function detectPlatform(): Platform {
   if (window.flutter_inappwebview) return 'flutter'
   if (window.webkit?.messageHandlers?.tiptapBridge) return 'ios'
   if (window.AndroidTiptapBridge) return 'android'
+  if (window.ReactNativeWebView) return 'reactnative'
   return 'browser'
 }
 
@@ -44,6 +50,7 @@ function detectPlatform(): Platform {
  * - Flutter: window.flutter_inappwebview.callHandler('tiptapBridge', json)
  * - iOS:     window.webkit.messageHandlers.tiptapBridge.postMessage(json)
  * - Android: window.AndroidTiptapBridge.postMessage(json)
+ * - React Native: window.ReactNativeWebView.postMessage(json)
  * - browser: window.postMessage (for testing without a native host)
  *
  * Inbound (host -> editor): the host calls window.tiptapBridge.handleCommand(json).
@@ -133,6 +140,9 @@ export class Bridge {
         return
       case 'android':
         window.AndroidTiptapBridge?.postMessage(json)
+        return
+      case 'reactnative':
+        window.ReactNativeWebView?.postMessage(json)
         return
       case 'browser':
         window.postMessage({ source: 'tiptap-editor', message }, '*')
