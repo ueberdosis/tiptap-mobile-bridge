@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "postbuild": "node -e \"const fs=require('fs');for(const dest of ['../flutter_example/assets/editor.html','../ios_example/TiptapBridgeExample/Resources/editor.html'])fs.copyFileSync('dist/index.html',dest)\"",
+    "postbuild": "node -e \"const fs=require('fs');for(const dest of ['../flutter_example/assets/editor.html','../ios_example/TiptapBridgeExample/Resources/editor.html','../android_example/app/src/main/assets/editor.html'])fs.copyFileSync('dist/index.html',dest)\"",
     "preview": "vite preview"
   },
   "devDependencies": {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A bare NoActionBar framework theme; the UI is entirely Compose (Material 3), so no
+     Material Components XML theme (and its dependency) is needed. enableEdgeToEdge() in
+     MainActivity handles the system-bar styling. -->
+<resources>
+    <style name="Theme.TiptapBridge" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

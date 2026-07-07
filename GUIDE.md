@@ -48,6 +48,8 @@ flutter_example/          reference Flutter host (native toolbar + webview)
   assets/editor.html      the built web bundle (copied from web/dist/index.html)
 ios_example/              reference iOS host (SwiftUI + WKWebView), at parity with Flutter
   TiptapBridgeExample/    the Swift bridge, screen, and WKWebView wrapper
+android_example/          reference Android host (Jetpack Compose + WebView), at parity
+  app/src/main/java/…/    the Kotlin bridge, screen, and WebView wrapper
 ```
 
 ## Quick start
@@ -161,7 +163,7 @@ webView.evaluateJavaScript("window.tiptapBridge.handleCommand(\(literal))")
 > fire before the editor's module installs it, so poll for it before `init` (see
 > `ios_example`'s `EditorWebView.swift`).
 
-### Android / WebView: reference wiring
+### Android / WebView: implemented and tested ([`android_example`](./android_example))
 
 Outbound via a `@JavascriptInterface`; inbound via `evaluateJavascript`:
 
@@ -176,14 +178,20 @@ webView.addJavascriptInterface(object {
 webView.evaluateJavascript("window.tiptapBridge.handleCommand(${JSONObject.quote(jsonString)})", null)
 ```
 
+> A `@JavascriptInterface` callback arrives on a background thread, so the host marshals every WebView
+> call back to the main thread (a WebView is not thread-safe) — the one concern the Flutter and iOS
+> hosts don't have. As on iOS, send the first command only after `window.tiptapBridge` exists: the
+> editor's ES module can install it just after the page finishes loading, so `android_example` polls
+> for it before `init` (see `EditorWebView.kt`).
+
 ### Browser: dev only
 
 Every direction uses `window.postMessage` with `source` tags (`tiptap-host` inbound, including host
 replies; `tiptap-editor` outbound, including host requests); this is exactly what the dev host uses.
 
-> The **Flutter** and **iOS** hosts are implemented and tested in this POC (`flutter_example/`
-> and `ios_example/`). The Android snippet is the reference wiring the protocol expects; the web
-> side already detects and targets all four carriers.
+> The **Flutter**, **iOS**, and **Android** hosts are all implemented and tested in this POC
+> (`flutter_example/`, `ios_example/`, `android_example/`). The browser is the dev-only carrier the
+> dev host uses; the web side detects and targets all four.
 
 ## Use the bridge in your own app
 
@@ -205,9 +213,11 @@ A real integration is six steps:
    no network or asset requests. A `postbuild` step copies it into the example apps; point it (or
    copy by hand) into *your* app's assets instead.
 4. **Copy the native bridge.** It has no dependency on the example UI:
-   [`tiptap_bridge.dart`](./flutter_example/lib/tiptap_bridge.dart) for Flutter, or
+   [`tiptap_bridge.dart`](./flutter_example/lib/tiptap_bridge.dart) for Flutter,
    [`TiptapBridge.swift`](./ios_example/TiptapBridgeExample/TiptapBridge.swift) plus
-   `EditorWebView.swift` for iOS. Load the built bundle into a webview and `attach` the bridge.
+   `EditorWebView.swift` for iOS, or
+   [`TiptapBridge.kt`](./android_example/app/src/main/java/dev/tiptap/mobilebridge/example/TiptapBridge.kt)
+   plus `EditorWebView.kt` for Android. Load the built bundle into a webview and `attach` the bridge.
 5. **Build your toolbar.** A toolbar button is just `exec(command, args)`, reading active state
    from the `selectionChanged` event. Render your own UI and call the bridge the same way; keep its
    command keys in sync with `TOOLBAR_COMMANDS` in `main.ts` (the
