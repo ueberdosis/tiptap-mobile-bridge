@@ -7,12 +7,14 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Whether a command can run, and whether its mark/node is active at the selection.
@@ -38,8 +40,10 @@ class TiptapBridge {
     private val nextId = AtomicInteger(1)
     private val pending = mutableMapOf<String, CompletableDeferred<Any?>>()
 
-    /** Handlers the editor can invoke via a host request, keyed by request name. See [onRequest]. */
-    private val requestHandlers = mutableMapOf<String, suspend (JSONObject) -> Any?>()
+    /** Handlers the editor can invoke via a host request, keyed by request name. See [onRequest].
+     *  Concurrent because it is written on the main thread (onRequest) yet read on the background
+     *  @JavascriptInterface thread (handleHostRequest). */
+    private val requestHandlers = ConcurrentHashMap<String, suspend (JSONObject) -> Any?>()
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -58,6 +62,12 @@ class TiptapBridge {
      *  separately through the @JavascriptInterface (see [handle]). */
     fun attach(webView: WebView) {
         this.webView = webView
+    }
+
+    /** Cancel the bridge's coroutine scope; call when the host screen is torn down (mirrors the
+     *  Flutter host's dispose()). In Compose, wire it from a DisposableEffect. */
+    fun dispose() {
+        scope.cancel()
     }
 
     // Inbound (editor -> host)
@@ -170,7 +180,10 @@ class TiptapBridge {
         return deferred.await()
     }
 
-    /** Run `evaluateJavascript` on the main thread; a WebView is not thread-safe. */
+    /** Run `evaluateJavascript` on the main thread (a WebView is not thread-safe). Android's callback
+     *  reports only a script's return value, not evaluation errors, so — unlike the Flutter/iOS hosts —
+     *  a failed inbound eval cannot fail-fast the pending command here; the no-webview guard in [send]
+     *  is the one hard failure this direction surfaces. */
     private fun evaluate(js: String) {
         mainHandler.post { webView?.evaluateJavascript(js, null) }
     }

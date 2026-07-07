@@ -1,6 +1,7 @@
 package dev.tiptap.mobilebridge.example
 
 import android.annotation.SuppressLint
+import android.content.pm.ApplicationInfo
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -21,13 +22,18 @@ import androidx.compose.ui.viewinterop.AndroidView
 fun EditorWebView(bridge: TiptapBridge, onReady: () -> Unit, modifier: Modifier = Modifier) {
     AndroidView(
         modifier = modifier,
+        // Tear the WebView down when the composable leaves for good, so it does not outlive the screen.
+        onRelease = { it.destroy() },
         factory = { context ->
             WebView(context).apply {
                 settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.allowFileAccess = true
-                // Mirrors iOS's isInspectable: lets `chrome://inspect` attach to the editor.
-                WebView.setWebContentsDebuggingEnabled(true)
+                // Loading file:///android_asset/ needs neither allowFileAccess (asset/resource access
+                // is independent of that flag, which stays at its tighter default) nor DOM storage.
+                // Mirrors iOS's isInspectable, but gated to debuggable builds: remote WebView
+                // inspection must never be reachable in a release build someone ships from this.
+                if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+                    WebView.setWebContentsDebuggingEnabled(true)
+                }
 
                 // Outbound: editor -> host. The web side calls
                 // window.AndroidTiptapBridge.postMessage(json) on the JavaBridge thread; the bridge

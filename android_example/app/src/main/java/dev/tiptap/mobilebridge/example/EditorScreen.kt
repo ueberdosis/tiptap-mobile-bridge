@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -113,6 +114,11 @@ fun EditorScreen() {
     val lastEvent by bridge.lastEvent.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // Cancel the bridge's coroutine scope when the screen leaves composition (mirrors Flutter's dispose()).
+    DisposableEffect(bridge) {
+        onDispose { bridge.dispose() }
+    }
 
     var linkPromptVisible by remember { mutableStateOf(false) }
     var linkUrl by remember { mutableStateOf("") }
