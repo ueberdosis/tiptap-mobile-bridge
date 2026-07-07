@@ -1,0 +1,17 @@
+# Build output
+/build
+/app/build
+.gradle
+.cxx
+/captures
+
+# Machine-specific SDK location (generated; do not commit)
+/local.properties
+
+# IDE
+*.iml
+/.idea
+.DS_Store
+
+# The Gradle wrapper (gradlew, gradlew.bat, gradle/wrapper/gradle-wrapper.jar) IS committed
+# so the project builds out of the box, mirroring how ios_example ships a runnable Xcode project.

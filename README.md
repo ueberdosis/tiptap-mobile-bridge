@@ -12,6 +12,7 @@ A proof-of-concept with reference Flutter and iOS hosts.
 - **`web/`**: the Tiptap editor + JS bridge, built to a single inlined HTML file.
 - **`flutter_example/`**: a reference native host (native toolbar + webview) using the bridge.
 - **`ios_example/`**: the iOS counterpart, a native SwiftUI + WKWebView host at parity with Flutter.
+- **`android_example/`**: the Android counterpart, a native Jetpack Compose + WebView host at parity.
 
 ## Docs
 
@@ -25,6 +26,6 @@ cd web && npm install && npm run build    # builds + copies the bundle into both
 cd ../flutter_example && flutter run       # iOS simulator or device
 ```
 
-Flutter and iOS have runnable example hosts ([`flutter_example`](./flutter_example/README.md),
-[`ios_example`](./ios_example/README.md)); the Android wiring is documented in the guide. To put the
+Flutter, iOS, and Android all have runnable example hosts ([`flutter_example`](./flutter_example/README.md),
+[`ios_example`](./ios_example/README.md), [`android_example`](./android_example/README.md)). To put the
 bridge in your own app, see [Use the bridge in your own app](./GUIDE.md#use-the-bridge-in-your-own-app).
