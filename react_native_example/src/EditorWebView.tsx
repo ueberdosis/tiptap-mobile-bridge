@@ -31,7 +31,11 @@ const BRIDGE_READY_PROBE = `
       clearInterval(timer);
       window.ReactNativeWebView.postMessage('${BRIDGE_READY_MESSAGE}');
     } else if (++attempts > 100) {
+      // Give up after ~3s but signal anyway, so the host attempts init and a genuine failure
+      // surfaces (its command times out and is logged) rather than hanging silently — the same
+      // "fire anyway" fallback the iOS and Android hosts use.
       clearInterval(timer);
+      window.ReactNativeWebView.postMessage('${BRIDGE_READY_MESSAGE}');
     }
   }, 30);
 })();

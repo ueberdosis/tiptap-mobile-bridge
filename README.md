@@ -1,11 +1,11 @@
 # Tiptap Mobile Bridge
 
 Run a [Tiptap](https://tiptap.dev) editor inside a webview and drive it from a native app
-(Flutter / iOS / Android) over a small JSON message protocol. The editor renders in the
+(Flutter / iOS / Android / React Native) over a small JSON message protocol. The editor renders in the
 webview, so every Tiptap extension works as-is, while the native side sends commands and
 receives events across the bridge.
 
-A proof-of-concept with reference Flutter and iOS hosts.
+A proof-of-concept with reference Flutter, iOS, Android, and React Native hosts.
 
 ## Layout
 
