@@ -153,6 +153,14 @@ final class TiptapBridge: NSObject, ObservableObject {
                 ))
                 return
             }
+            // bridgeCallJS returns "" when the command can't be encoded (e.g. a non-JSON param);
+            // evaluating "" would succeed with no response, leaving the continuation un-resumed.
+            guard !js.isEmpty else {
+                continuation.resume(throwing: TiptapError(
+                    code: "ENCODE_FAILED", message: "could not encode command: \(name)"
+                ))
+                return
+            }
             pending[id] = continuation
             webView.evaluateJavaScript(js) { [weak self] _, error in
                 // A JS evaluation error means the editor never received the command, so the

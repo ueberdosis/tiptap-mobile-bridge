@@ -64,7 +64,7 @@ react_native_example/     reference React Native host (react-native-webview), at
 ```bash
 cd web
 npm install
-npm run build           # → web/dist/index.html, then copied into both example apps (Flutter + iOS)
+npm run build           # → web/dist/index.html, then copied into all four example apps (Flutter / iOS / Android / React Native)
 ```
 
 **2. Run the reference app** (iOS simulator or a real device):
@@ -141,9 +141,13 @@ In `main.dart` the webview loads the bundle and inits it once loaded:
 InAppWebView(
   initialFile: 'assets/editor.html',
   onWebViewCreated: _bridge.attach,
-  onLoadStop: (controller, url) { _bridge.init(); },
+  onLoadStop: (controller, url) async { await _bridge.waitUntilReady(); _bridge.init(); },
 )
 ```
+
+> As on iOS and Android, the editor's ES module can install `window.tiptapBridge` just after
+> `onLoadStop` fires, so `_bridge.waitUntilReady()` polls for it before `init` (see
+> `tiptap_bridge.dart`).
 
 > The bundle must be declared as a Flutter asset (`pubspec.yaml` → `flutter: assets: - assets/editor.html`).
 

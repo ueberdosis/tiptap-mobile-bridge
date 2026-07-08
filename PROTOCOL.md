@@ -116,7 +116,9 @@ It focuses first, then dispatches. `result.executed` is the boolean returned by 
 **`getHTML`** returns the full document as an HTML string. Same idea as `getJSON`, but HTML.
 
 **`setContent`** replaces the document. `content` is passed to `editor.commands.setContent`
-(HTML string or ProseMirror JSON).
+(HTML string or ProseMirror JSON). A programmatic replace is silent: it does **not** emit
+`contentChanged` (unlike a user edit), so loading a document never trips a `contentChanged`-based
+dirty flag.
 
 **`setTextSelection`** moves the selection. `{ from }` collapses the caret at `from`;
 `{ from, to }` selects a range.

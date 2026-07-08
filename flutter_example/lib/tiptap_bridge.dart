@@ -21,6 +21,17 @@ class TiptapEvent {
   final Map<String, dynamic> payload;
 }
 
+/// A failed command response, surfaced as a thrown error to the awaiting caller.
+class TiptapError implements Exception {
+  const TiptapError(this.code, this.message);
+
+  final String code;
+  final String message;
+
+  @override
+  String toString() => '$code: $message';
+}
+
 /// Drives a Tiptap editor running inside an [InAppWebView] over the JSON protocol.
 ///
 /// Commands are sent to the editor via `window.tiptapBridge.handleCommand`;
@@ -56,6 +67,25 @@ class TiptapBridge {
     );
   }
 
+  /// Poll until the editor's inbound bridge (`window.tiptapBridge`) is installed, then return.
+  /// The editor bundle is an ES module, so the inbound bridge can lag the page-load callback; this
+  /// gives it time to install before the first command. Gives up after ~2s (returning anyway) so a
+  /// genuine failure still surfaces via the command that follows rather than hanging silently.
+  Future<void> waitUntilReady({
+    int attempts = 40,
+    Duration interval = const Duration(milliseconds: 50),
+  }) async {
+    final controller = _controller;
+    if (controller == null) return;
+    for (var i = 0; i < attempts; i++) {
+      final ready = await controller.evaluateJavascript(
+        source: '!!(window.tiptapBridge && window.tiptapBridge.handleCommand)',
+      );
+      if (ready == true) return;
+      await Future<void>.delayed(interval);
+    }
+  }
+
   void _onMessage(Map<String, dynamic> msg) {
     final type = msg['type'];
     if (type == 'response') {
@@ -63,19 +93,25 @@ class TiptapBridge {
       if (msg['ok'] == true) {
         completer?.complete(msg['result']);
       } else {
-        completer?.completeError(msg['error'] ?? 'command failed');
+        final error = msg['error'] as Map<String, dynamic>?;
+        completer?.completeError(TiptapError(
+          error?['code'] as String? ?? 'COMMAND_FAILED',
+          error?['message'] as String? ?? 'command failed',
+        ));
       }
     } else if (type == 'event') {
       final name = msg['name'] as String;
       final payload = (msg['payload'] as Map<String, dynamic>?) ?? const {};
       if (name == 'selectionChanged') {
-        final states = payload['commandStates'] as Map<String, dynamic>;
-        commandStates.value = states.map(
-          (key, value) => MapEntry(
-            key,
-            CommandState(canExec: value['canExec'] == true, isActive: value['isActive'] == true),
-          ),
-        );
+        final states = payload['commandStates'] as Map<String, dynamic>?;
+        if (states != null) {
+          commandStates.value = states.map(
+            (key, value) => MapEntry(
+              key,
+              CommandState(canExec: value['canExec'] == true, isActive: value['isActive'] == true),
+            ),
+          );
+        }
       }
       _events.add(TiptapEvent(name, payload));
     } else if (type == 'hostRequest') {
@@ -128,7 +164,7 @@ class TiptapBridge {
     final controller = _controller;
     if (controller == null) {
       // No webview attached: fail fast instead of leaving the caller awaiting forever.
-      _pending.remove(id)?.completeError(StateError('TiptapBridge: not attached to a webview'));
+      _pending.remove(id)?.completeError(const TiptapError('NO_WEBVIEW', 'bridge is not attached to a webview'));
       return completer.future;
     }
     // A failed inbound eval means the editor never received the command, so its id-correlated

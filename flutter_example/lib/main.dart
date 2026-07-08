@@ -76,6 +76,9 @@ class _EditorPageState extends State<EditorPage> {
               initialFile: 'assets/editor.html',
               onWebViewCreated: _bridge.attach,
               onLoadStop: (controller, url) async {
+                // The editor bundle is an ES module, so window.tiptapBridge can lag onLoadStop;
+                // poll for it before the first command (mirrors the iOS/Android hosts).
+                await _bridge.waitUntilReady();
                 await _bridge.init();
                 // Subscribe to a few editor events for the demo; they flow for the editor's lifetime.
                 _bridge.subscribe('focus');
@@ -188,22 +191,36 @@ class _Toolbar extends StatelessWidget {
           IconButton(
             tooltip: 'Get JSON',
             onPressed: () async {
-              final json = await bridge.getJson();
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(json.toString(), maxLines: 4)),
-              );
+              try {
+                final json = await bridge.getJson();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(json.toString(), maxLines: 4)),
+                );
+              } catch (error) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Get JSON failed: $error')),
+                );
+              }
             },
             icon: const Icon(Icons.data_object),
           ),
           IconButton(
             tooltip: 'Get HTML',
             onPressed: () async {
-              final html = await bridge.getHtml();
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(html.toString(), maxLines: 4)),
-              );
+              try {
+                final html = await bridge.getHtml();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(html.toString(), maxLines: 4)),
+                );
+              } catch (error) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Get HTML failed: $error')),
+                );
+              }
             },
             icon: const Icon(Icons.code),
           ),

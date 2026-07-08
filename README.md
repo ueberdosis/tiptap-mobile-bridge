@@ -23,7 +23,7 @@ This is a **reference implementation** to copy into your own app, **not an insta
 ## Quick start
 
 ```bash
-cd web && npm install && npm run build    # builds + copies the bundle into both example apps
+cd web && npm install && npm run build    # builds + copies the bundle into all four example apps
 cd ../flutter_example && flutter run       # iOS simulator or device
 ```
 

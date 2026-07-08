@@ -18,6 +18,8 @@ agnostic with runnable native code.
 - A native toolbar (bold, italic, underline, strike, highlight, headings, lists, align, link,
   table) whose buttons send `exec` commands and light up from `selectionChanged` state, plus Get
   JSON / Get HTML and a native image picker that inserts the chosen photo over the bridge.
+- An `uploadImage` host request: the editor asks the host to upload a pasted image and inserts the
+  returned URL (a placeholder here; see [the guide](../GUIDE.md#use-the-bridge-in-your-own-app)).
 
 ## Requirements
 
@@ -49,7 +51,7 @@ and light up from `selectionChanged`), and Get JSON / Get HTML to fetch the cont
 ## Refresh the editor from the web build
 
 The editor is authored once in [`web/`](../web). Rebuilding it runs a postbuild step that copies
-the single inlined bundle into this app's resources (and the Flutter app's):
+the single inlined bundle into this app's resources (and the other example apps'):
 
 ```bash
 cd web
@@ -74,5 +76,5 @@ TiptapBridgeExample/
 
 ## Protocol
 
-See [PROTOCOL.md](../PROTOCOL.md) for the wire contract (commands, events, errors) and
+See [PROTOCOL.md](../PROTOCOL.md) for the wire contract (commands, events, host requests, errors) and
 [GUIDE.md](../GUIDE.md#transport-per-platform) for the iOS transport notes.
