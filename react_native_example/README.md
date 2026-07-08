@@ -50,7 +50,7 @@ light up from `selectionChanged`), and Get JSON / Get HTML to fetch the content.
 ## Refresh the editor from the web build
 
 The editor is authored once in [`web/`](../web). Rebuilding it runs a postbuild step that copies the
-single inlined bundle into this app (and the Flutter and iOS apps):
+single inlined bundle into this app (and the other example apps):
 
 ```bash
 cd web

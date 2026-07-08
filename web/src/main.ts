@@ -284,7 +284,13 @@ function handleInit(command: Command): void {
 
 function handleCommand(command: Command): void {
   if (command.name === 'init') {
-    handleInit(command)
+    // init runs outside the try below, so guard it here: a throw from `new Editor` (e.g. content
+    // that fails schema parsing) must still send a correlated COMMAND_FAILED, not hang the handshake.
+    try {
+      handleInit(command)
+    } catch (error) {
+      fail(command.id, 'COMMAND_FAILED', String(error))
+    }
     return
   }
   if (!editor) {
@@ -313,7 +319,9 @@ function handleCommand(command: Command): void {
       }
       case 'setContent': {
         const { content } = (command.params ?? {}) as { content: unknown }
-        editor.commands.setContent(content as string)
+        // emitUpdate:false — a programmatic replace stays silent (no contentChanged), unlike a user
+        // edit, so a host that dirty-tracks via contentChanged is not tripped by loading a document.
+        editor.commands.setContent(content as string, { emitUpdate: false })
         ok(command.id)
         return
       }
