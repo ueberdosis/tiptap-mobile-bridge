@@ -1,6 +1,6 @@
 # Tiptap Mobile Bridge Integration Guide
 
-How to drive a Tiptap editor from a native app (Flutter / iOS / Android) by running the
+How to drive a Tiptap editor from a native app (Flutter / iOS / Android / React Native) by running the
 editor in a webview and talking to it over a small JSON protocol. For the wire format see
 [PROTOCOL.md](./PROTOCOL.md); this guide is the practical how-to.
 
@@ -48,6 +48,13 @@ flutter_example/          reference Flutter host (native toolbar + webview)
   assets/editor.html      the built web bundle (copied from web/dist/index.html)
 ios_example/              reference iOS host (SwiftUI + WKWebView), at parity with Flutter
   TiptapBridgeExample/    the Swift bridge, screen, and WKWebView wrapper
+android_example/          reference Android host (Jetpack Compose + WebView), at parity
+  app/src/main/java/…/    the Kotlin bridge, screen, and WebView wrapper
+react_native_example/     reference React Native host (react-native-webview), at parity
+  src/TiptapBridge.ts     the bridge: id-correlated commands, events, host requests
+  src/EditorWebView.tsx   the react-native-webview wrapper + bridge-ready handshake
+  src/EditorScreen.tsx    the app: a native toolbar + the webview
+  editor.html             the built web bundle (copied from web/dist/index.html)
 ```
 
 ## Quick start
@@ -89,7 +96,7 @@ responses/events coming back. No native toolchain needed.
 
 Every host carries the protocol's directions over one message channel. **Inbound** is identical
 everywhere; only the **outbound** carrier differs. The web side ([`bridge.ts`](./web/src/bridge.ts))
-auto-detects the platform (order: flutter → ios → android → browser).
+auto-detects the platform (order: flutter → ios → android → react native → browser).
 
 - **Inbound (host → editor), all platforms:** evaluate JS that calls
   `window.tiptapBridge.handleCommand("<json>")` for a command, or
@@ -161,7 +168,7 @@ webView.evaluateJavaScript("window.tiptapBridge.handleCommand(\(literal))")
 > fire before the editor's module installs it, so poll for it before `init` (see
 > `ios_example`'s `EditorWebView.swift`).
 
-### Android / WebView: reference wiring
+### Android / WebView: implemented and tested ([`android_example`](./android_example))
 
 Outbound via a `@JavascriptInterface`; inbound via `evaluateJavascript`:
 
@@ -176,14 +183,44 @@ webView.addJavascriptInterface(object {
 webView.evaluateJavascript("window.tiptapBridge.handleCommand(${JSONObject.quote(jsonString)})", null)
 ```
 
+> A `@JavascriptInterface` callback arrives on a background thread, so the host marshals every WebView
+> call back to the main thread (a WebView is not thread-safe) — the one concern the Flutter and iOS
+> hosts don't have. As on iOS, send the first command only after `window.tiptapBridge` exists: the
+> editor's ES module can install it just after the page finishes loading, so `android_example` polls
+> for it before `init` (see `EditorWebView.kt`).
+
+### React Native / react-native-webview: implemented and tested ([`react_native_example`](./react_native_example))
+
+Outbound uses react-native-webview's message channel; inbound uses `injectJavaScript`:
+
+```tsx
+// Outbound: editor → host. The web side calls window.ReactNativeWebView.postMessage(json).
+// react-native-webview delivers it to the onMessage prop — which MUST be set, or the web side's
+// window.ReactNativeWebView is never injected and the platform is not detected.
+<WebView onMessage={(e) => bridge.handleMessage(e.nativeEvent.data)} /* … */ />
+
+// Inbound: host → editor. Encode the command JSON as a JS string literal (escapes it), then call
+// the entry point — the same double-encode as Flutter/iOS.
+webviewRef.current?.injectJavaScript(`window.tiptapBridge.handleCommand(${literal}); true;`)
+```
+
+> Three React Native specifics: `injectJavaScript` returns nothing (no success or error, unlike
+> `evaluateJavaScript`), so the bridge adds a per-command timeout for the same "caller never hangs"
+> guarantee, and the injected script must end with `true;`. The editor bundle is an ES module, so
+> `window.tiptapBridge` can lag the page load; the host polls for it in `injectedJavaScript` and
+> signals before `init` (see `react_native_example`'s `EditorWebView.tsx`). Load the bundle as
+> inline HTML (`source={{ html }}` with `originWhitelist={['*']}`) — react-native-webview does not
+> load local files in release builds. The bridge is framework-agnostic, so the same code runs under
+> Expo (swap the image picker).
+
 ### Browser: dev only
 
 Every direction uses `window.postMessage` with `source` tags (`tiptap-host` inbound, including host
 replies; `tiptap-editor` outbound, including host requests); this is exactly what the dev host uses.
 
-> The **Flutter** and **iOS** hosts are implemented and tested in this POC (`flutter_example/`
-> and `ios_example/`). The Android snippet is the reference wiring the protocol expects; the web
-> side already detects and targets all four carriers.
+> The **Flutter**, **iOS**, **Android**, and **React Native** hosts are all implemented and tested in
+> this POC (`flutter_example/`, `ios_example/`, `android_example/`, and `react_native_example/`). The
+> browser is the dev-only carrier the dev host uses; the web side detects and targets all five.
 
 ## Use the bridge in your own app
 
@@ -205,9 +242,13 @@ A real integration is six steps:
    no network or asset requests. A `postbuild` step copies it into the example apps; point it (or
    copy by hand) into *your* app's assets instead.
 4. **Copy the native bridge.** It has no dependency on the example UI:
-   [`tiptap_bridge.dart`](./flutter_example/lib/tiptap_bridge.dart) for Flutter, or
+   [`tiptap_bridge.dart`](./flutter_example/lib/tiptap_bridge.dart) for Flutter,
    [`TiptapBridge.swift`](./ios_example/TiptapBridgeExample/TiptapBridge.swift) plus
-   `EditorWebView.swift` for iOS. Load the built bundle into a webview and `attach` the bridge.
+   `EditorWebView.swift` for iOS,
+   [`TiptapBridge.kt`](./android_example/app/src/main/java/dev/tiptap/mobilebridge/example/TiptapBridge.kt)
+   plus `EditorWebView.kt` for Android, or
+   [`TiptapBridge.ts`](./react_native_example/src/TiptapBridge.ts) plus `EditorWebView.tsx` for
+   React Native. Load the built bundle into a webview and `attach` the bridge.
 5. **Build your toolbar.** A toolbar button is just `exec(command, args)`, reading active state
    from the `selectionChanged` event. Render your own UI and call the bridge the same way; keep its
    command keys in sync with `TOOLBAR_COMMANDS` in `main.ts` (the

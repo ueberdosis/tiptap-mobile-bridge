@@ -6,12 +6,19 @@ webview, so every Tiptap extension works as-is, while the native side sends comm
 receives events across the bridge.
 
 This is a **reference implementation** to copy into your own app, **not an installable package** (there is no `npm` or `pub` package). It includes runnable Flutter and iOS host apps.
+(Flutter / iOS / Android / React Native) over a small JSON message protocol. The editor renders in the
+webview, so every Tiptap extension works as-is, while the native side sends commands and
+receives events across the bridge.
+
+A proof-of-concept with reference Flutter, iOS, Android, and React Native hosts.
 
 ## Layout
 
 - **`web/`**: the Tiptap editor + JS bridge, built to a single inlined HTML file.
 - **`flutter_example/`**: a reference native host (native toolbar + webview) using the bridge.
 - **`ios_example/`**: the iOS counterpart, a native SwiftUI + WKWebView host at parity with Flutter.
+- **`android_example/`**: the Android counterpart, a native Jetpack Compose + WebView host at parity.
+- **`react_native_example/`**: the React Native counterpart, a bare RN + react-native-webview host at parity.
 
 ## Docs
 
@@ -25,6 +32,8 @@ cd web && npm install && npm run build    # builds + copies the bundle into both
 cd ../flutter_example && flutter run       # iOS simulator or device
 ```
 
-Flutter and iOS have runnable example hosts ([`flutter_example`](./flutter_example/README.md),
-[`ios_example`](./ios_example/README.md)); the Android wiring is documented in the guide. To put the
-bridge in your own app, see [Use the bridge in your own app](./GUIDE.md#use-the-bridge-in-your-own-app).
+Flutter, iOS, Android, and React Native all have runnable example hosts
+([`flutter_example`](./flutter_example/README.md), [`ios_example`](./ios_example/README.md),
+[`android_example`](./android_example/README.md),
+[`react_native_example`](./react_native_example/README.md)). To put the bridge in your own app, see
+[Use the bridge in your own app](./GUIDE.md#use-the-bridge-in-your-own-app).

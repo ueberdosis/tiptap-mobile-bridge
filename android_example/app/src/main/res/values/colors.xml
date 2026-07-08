@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Indigo, matching the Flutter example's seed color, for a consistent cross-example identity. -->
+    <color name="ic_launcher_background">#3F51B5</color>
+</resources>
