@@ -168,7 +168,7 @@ fun EditorScreen() {
             Text("Tiptap Mobile Bridge", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.weight(1f))
             Text(
-                "event: ${lastEvent ?: "(none)"}",
+                "event: ${lastEvent?.name ?: "(none)"}",
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

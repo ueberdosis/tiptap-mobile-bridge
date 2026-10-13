@@ -33,8 +33,8 @@ final class TiptapBridge: NSObject, ObservableObject {
     /// Latest per-command state (from `selectionChanged`); drives toolbar active styling.
     @Published private(set) var commandStates: [String: CommandState] = [:]
 
-    /// Name of the most recent event received over the bridge (drives the demo event line).
-    @Published private(set) var lastEvent: String?
+    /// The most recent event received over the bridge, with its JSON payload (drives the demo event line).
+    @Published private(set) var lastEvent: TiptapEvent?
 
     private weak var webView: WKWebView?
     private var nextId = 1
@@ -86,8 +86,8 @@ final class TiptapBridge: NSObject, ObservableObject {
                     )
                 }
             }
-            lastEvent = name
-            print("[tiptap] event: \(name)")
+            lastEvent = TiptapEvent(name: name, payload: payload)
+            print("[tiptap] event: \(name) \(payload)")
         case "hostRequest":
             handleHostRequest(message)
         default:
