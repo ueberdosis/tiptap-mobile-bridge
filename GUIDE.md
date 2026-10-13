@@ -46,6 +46,7 @@ web/                      TypeScript editor + bridge (the shared, platform-agnos
 flutter_example/          reference Flutter host (native toolbar + webview)
   lib/tiptap_bridge.dart  the bridge: id-correlated commands, events via a JS handler
   lib/main.dart           the app: a native toolbar + the webview
+  test/                   bridge tests against a fake webview controller
   assets/editor.html      the built web bundle (copied from web/dist/index.html)
 ios_example/              reference iOS host (SwiftUI + WKWebView), at parity with Flutter
   TiptapBridgeExample/    the Swift bridge, screen, and WKWebView wrapper
