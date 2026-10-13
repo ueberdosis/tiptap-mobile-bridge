@@ -55,6 +55,7 @@ react_native_example/     reference React Native host (react-native-webview), at
   src/TiptapBridge.ts     the bridge: id-correlated commands, events, host requests
   src/EditorWebView.tsx   the react-native-webview wrapper + bridge-ready handshake
   src/EditorScreen.tsx    the app: a native toolbar + the webview
+  __tests__/              jest suite for the bridge, against a fake editor page
   editor.html             the built web bundle (copied from web/dist/index.html)
 ```
 

@@ -1,0 +1,27 @@
+name: react-native
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: react_native_example
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: react_native_example/package-lock.json
+      - run: npm ci
+      - run: npx tsc
+      - run: npm run lint
+      - run: npm test

@@ -47,6 +47,8 @@ npm run ios        # builds and launches on an iOS simulator
 Tap into the editor and type; use the toolbar to format the selection (the buttons send `exec` and
 light up from `selectionChanged`), and Get JSON / Get HTML to fetch the content.
 
+`npm test` runs the jest suite for `TiptapBridge.ts` against a fake editor page, with no simulator.
+
 ## Refresh the editor from the web build
 
 The editor is authored once in [`web/`](../web). Rebuilding it runs a postbuild step that copies the
@@ -72,6 +74,7 @@ src/
   EditorWebView.tsx      react-native-webview wrapper + bridge-ready handshake
   EditorScreen.tsx       the screen: native toolbar + webview + event line
   html.d.ts              lets `import './editor.html'` resolve to the bundle as a string
+__tests__/               jest suite for the bridge, against a fake editor page
 editor.html              the built web bundle (generated, do not edit)
 babel.config.js          inlines editor.html as a string (babel-plugin-inline-import)
 ```
