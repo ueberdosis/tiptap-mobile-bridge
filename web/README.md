@@ -8,6 +8,7 @@ transport around it.
 
 ```bash
 npm install
+npm test        # vitest + jsdom: the bridge and the protocol, driven like a native host
 npm run build   # writes dist/index.html, then copies it into the example apps
 ```
 

@@ -38,6 +38,7 @@ web/                      TypeScript editor + bridge (the shared, platform-agnos
   src/bridge.ts           transport + platform auto-detection
   src/main.ts             the editor (StarterKit) + command/event handling
   src/dev-host.ts         in-browser "native host" simulator (dev only)
+  test/                   vitest suites: the bridge + protocol, driven like a native host
   index.html              production mount point (#editor)
   dev.html                loads the dev host
   vite.config.ts          single-file build (vite-plugin-singlefile)
@@ -91,6 +92,9 @@ npm run dev             # open the printed URL, then add /dev.html
 
 Click **init** first, then the formatting buttons; the log shows every command and the
 responses/events coming back. No native toolchain needed.
+
+`npm test` checks the same logic unattended: vitest drives the editor in jsdom through
+`window.tiptapBridge`, the way a native host does, and asserts the responses and events.
 
 ## Transport per platform
 
