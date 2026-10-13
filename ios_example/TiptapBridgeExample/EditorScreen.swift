@@ -39,7 +39,7 @@ struct EditorScreen: View {
             Spacer()
             // The latest editor event received over the bridge (driven by the subscribe()
             // calls in start()); proves "receive events" end to end.
-            Text("event: \(bridge.lastEvent ?? "(none)")")
+            Text("event: \(bridge.lastEvent?.name ?? "(none)")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospaced()

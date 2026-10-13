@@ -79,11 +79,15 @@ class _EditorPageState extends State<EditorPage> {
                 // The editor bundle is an ES module, so window.tiptapBridge can lag onLoadStop;
                 // poll for it before the first command (mirrors the iOS/Android hosts).
                 await _bridge.waitUntilReady();
-                await _bridge.init();
-                // Subscribe to a few editor events for the demo; they flow for the editor's lifetime.
-                _bridge.subscribe('focus');
-                _bridge.subscribe('blur');
-                _bridge.subscribe('update');
+                try {
+                  await _bridge.init();
+                  // Subscribe to a few editor events for the demo; they flow for the editor's lifetime.
+                  await _bridge.subscribe('focus');
+                  await _bridge.subscribe('blur');
+                  await _bridge.subscribe('update');
+                } catch (error) {
+                  debugPrint('tiptap init failed: $error');
+                }
               },
             ),
           ),

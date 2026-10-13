@@ -2,6 +2,7 @@ package dev.tiptap.mobilebridge.example
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.webkit.WebView
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +21,10 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Whether a command can run, and whether its mark/node is active at the selection.
  *  Mirrors the CommandState carried in the selectionChanged event payload. */
 data class CommandState(val canExec: Boolean, val isActive: Boolean)
+
+/** A generic editor event forwarded over the bridge. [name] is the event name (`ready`,
+ *  `selectionChanged`, `focus`, `blur`, ...); [payload] is its JSON projection. */
+data class TiptapEvent(val name: String, val payload: JSONObject)
 
 /** A failed command response, surfaced as a thrown exception to the awaiting caller. */
 class TiptapError(val code: String, val detail: String) : Exception("$code: $detail")
@@ -53,10 +58,10 @@ class TiptapBridge {
     /** Latest per-command state (from selectionChanged); drives toolbar active styling. */
     val commandStates: StateFlow<Map<String, CommandState>> = _commandStates.asStateFlow()
 
-    private val _lastEvent = MutableStateFlow<String?>(null)
+    private val _lastEvent = MutableStateFlow<TiptapEvent?>(null)
 
-    /** Name of the most recent event received over the bridge (drives the demo event line). */
-    val lastEvent: StateFlow<String?> = _lastEvent.asStateFlow()
+    /** The most recent event received over the bridge, with its JSON payload (drives the demo event line). */
+    val lastEvent: StateFlow<TiptapEvent?> = _lastEvent.asStateFlow()
 
     /** Wire up the WebView the bridge sends commands into. Inbound messages are delivered
      *  separately through the @JavascriptInterface (see [handle]). */
@@ -116,7 +121,8 @@ class TiptapBridge {
                         _commandStates.value = parsed
                     }
                 }
-                _lastEvent.value = name
+                _lastEvent.value = TiptapEvent(name, payload)
+                Log.d("tiptap", "event: $name $payload")
             }
 
             "hostRequest" -> handleHostRequest(message)
