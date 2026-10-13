@@ -1,0 +1,27 @@
+name: flutter
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter_example
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.3
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      # Infos stay non-fatal: the bridge's `if (x != null) 'k': x` maps trip the newer use_null_aware_elements lint.
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test

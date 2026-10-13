@@ -39,6 +39,8 @@ flutter run        # choose an iOS simulator or device
 Tap into the editor and type; use the toolbar to format the selection (the buttons send `exec` and
 light up from `selectionChanged`), and Get JSON / Get HTML to fetch the content.
 
+`flutter test` runs the bridge tests against a fake webview controller, with no device.
+
 ## Refresh the editor from the web build
 
 The editor is authored once in [`web/`](../web). Rebuilding it runs a postbuild step that copies
@@ -59,6 +61,7 @@ Do not hand edit `assets/editor.html`; it is generated from the web build.
 lib/
   main.dart            the app: native toolbar, webview, event logging, image picker
   tiptap_bridge.dart   the bridge: id-correlated commands, events, host requests
+test/                  bridge tests against a fake webview controller
 assets/editor.html     the built web bundle (generated, do not edit)
 pubspec.yaml           declares the asset and deps (flutter_inappwebview, image_picker)
 ```
