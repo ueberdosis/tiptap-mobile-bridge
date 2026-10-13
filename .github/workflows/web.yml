@@ -1,0 +1,29 @@
+name: web
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      # The hosts load committed copies of the bundle, so a source change must ship with a rebuild.
+      - name: Check the committed editor.html copies are current
+        run: git diff --exit-code --stat || { echo "::error::stale editor.html; run 'npm run build' in web/ and commit the copies"; exit 1; }
