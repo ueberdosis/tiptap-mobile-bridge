@@ -10,8 +10,8 @@ class FakeWebViewController implements InAppWebViewController {
   final List<String> scripts = [];
   JavaScriptHandlerCallback? _handler;
 
-  /// What each `evaluateJavascript` call resolves to; make it throw to simulate a failed eval.
-  Future<dynamic> Function(String source) evaluate = (_) async => null;
+  /// What the page's JavaScript evaluates to; throw to simulate a failed eval.
+  Object? Function(String source) evaluate = (_) => null;
 
   @override
   void addJavaScriptHandler({required String handlerName, required JavaScriptHandlerCallback callback}) {
@@ -21,7 +21,8 @@ class FakeWebViewController implements InAppWebViewController {
   @override
   Future<dynamic> evaluateJavascript({required String source, ContentWorld? contentWorld}) {
     scripts.add(source);
-    return evaluate(source);
+    // The platform channel resolves to a Future<dynamic>; match its runtime type.
+    return Future<dynamic>.sync(() => evaluate(source));
   }
 
   /// Send an editor -> host message the way the page's `callHandler('tiptapBridge', json)` does.
@@ -108,7 +109,7 @@ void main() {
 
     test('fails the pending command when the eval fails, then ignores a late response', () async {
       final evalError = Exception('webview gone');
-      controller.evaluate = (_) async => throw evalError;
+      controller.evaluate = (_) => throw evalError;
 
       await expectLater(bridge.getHtml(), throwsA(same(evalError)));
       expect(() => controller.deliver({'type': 'response', 'id': '1', 'ok': true}), returnsNormally);
@@ -118,14 +119,14 @@ void main() {
   group('waitUntilReady', () {
     test('polls until the inbound bridge is installed', () async {
       final answers = [false, false, true];
-      controller.evaluate = (_) async => answers.removeAt(0);
+      controller.evaluate = (_) => answers.removeAt(0);
 
       await bridge.waitUntilReady(interval: Duration.zero);
       expect(controller.scripts, hasLength(3));
     });
 
     test('returns anyway once the attempts run out', () async {
-      controller.evaluate = (_) async => false;
+      controller.evaluate = (_) => false;
 
       await bridge.waitUntilReady(attempts: 5, interval: Duration.zero);
       expect(controller.scripts, hasLength(5));
